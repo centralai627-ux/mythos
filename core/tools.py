@@ -1,24 +1,50 @@
 """
 Mythos Tools
 =============
-Model-agnostic tool registry for the agentic loop. the AI emits structured
+Model-agnostic tool registry for the agentic loop. The AI emits structured
 `mythos-tool` blocks; this module executes them and returns observations.
 
-Tools (each returns a string observation for the AI):
-  - read_file(path)            -> file contents (truncated)
-  - write_file(path, content)  -> success/error
-  - list_dir(path)             -> directory listing
-  - search(pattern, path, glob)-> ripgrep-style search results
-  - run_shell(command, shell)  -> captured stdout/stderr/exit code
-  - ask_user(question)         -> prompts the human (UI hook)
-  - web_search(query)          -> search the web (DuckDuckGo, no API key)
+File & Directory Tools:
+  - read_file(path)            -> file contents (truncated at 60K chars)
+  - write_file(path, content)  -> atomic write, creates parent dirs
+  - list_dir(path)             -> directory listing (max 500 entries)
+  - search(pattern, path, glob)-> search files for regex patterns
+
+Shell & System:
+  - run_shell(command, shell)  -> execute CMD/PowerShell commands
+
+User Interaction:
+  - ask_user(question)         -> free-text prompt via UI hook
+  - ask_choice(question, options) -> multiple-choice selection (2-12 options)
+  - ask_confirm(question)      -> yes/no confirmation
+
+Web:
+  - web_search(query)          -> search Wikipedia (no API key required)
   - web_fetch(url)             -> fetch + strip a web page's text
-  - generate_pdf(path,content) -> create a professional PDF document
-  - read_pdf(path, pages)      -> extract text from a PDF file
-  - merge_pdf(output, inputs)  -> merge multiple PDF files into one
+
+PDF:
+  - generate_pdf(path, content, title, author) -> create PDF from markdown
+  - read_pdf(path, pages)      -> extract text from PDF
+  - merge_pdf(output, inputs)  -> merge multiple PDFs into one
+
+Quantum Computing:
+  - quantum_optimize(cost_function, initial_state) -> quantum annealing
+  - quantum_search(data, target) -> Grover's search algorithm
+  - quantum_sort(data)          -> quantum-inspired sorting
+  - quantum_probability(outcomes, probabilities) -> probability distribution
+  - quantum_correlate(state1, state2) -> entanglement score
+  - quantum_neural(inputs, weights, architecture) -> quantum neural network
+  - quantum_cluster(data, n_clusters) -> quantum clustering
+  - quantum_pathfind(graph, start, end) -> quantum pathfinding
+  - quantum_encrypt(data, key) -> quantum encryption
+  - quantum_decrypt(data, key) -> quantum decryption
+  - quantum_recommend(user_history, item_features) -> recommendations
+  - quantum_anomaly(data, threshold) -> anomaly detection
+  - quantum_forecast(data, periods) -> time series forecast
+  - quantum_importance(features, target) -> feature importance
 
 Design principles:
-  - Path safety: all paths resolved against agent cwd; traversal blocked.
+  - Path safety: all paths resolved against cwd; traversal blocked.
   - Deterministic: same args -> same result (no hidden state).
   - Verbose errors: AI must see WHY a tool failed so it can self-correct.
 """
@@ -262,11 +288,15 @@ class ToolRegistry:
 
     # ----------------------- Path safety ----------------------- #
     def _resolve(self, path: str) -> str:
-        """Resolve a path against cwd; return absolute normalized path."""
+        """Resolve a path against cwd; return absolute normalized path.
+        Blocks path traversal outside of cwd for security."""
         if os.path.isabs(path):
             p = os.path.normpath(path)
         else:
             p = os.path.normpath(os.path.join(self.cwd, path))
+        # Security: ensure resolved path stays under cwd
+        if not p.startswith(self.cwd):
+            p = os.path.join(self.cwd, os.path.basename(p))
         return p
 
     # ----------------------- Tool implementations ----------------------- #
@@ -404,6 +434,9 @@ class ToolRegistry:
             return ToolResult(False, "", f"ask_choice failed: {e}")
         if idx is None:
             return ToolResult(True, "User cancelled the choice.")
+        # Bounds check to prevent IndexError
+        if not isinstance(idx, int) or idx < 0 or idx >= len(opts):
+            return ToolResult(False, "", f"Invalid selection index: {idx}")
         chosen = opts[idx]
         # Return both the chosen option AND its index so the AI has full info.
         return ToolResult(True,
@@ -889,10 +922,22 @@ class ToolRegistry:
 
             initial = json.loads(initial_state) if initial_state else []
 
-            def simple_cost(state):
-                return len(state) if isinstance(state, list) else 0
+            # Use provided cost_function or fallback to default
+            if cost_function and cost_function.strip():
+                # Try to parse as JSON array of costs, else use as expression
+                try:
+                    costs = json.loads(cost_function)
+                    def custom_cost(state):
+                        if isinstance(state, list) and len(state) <= len(costs):
+                            return sum(costs[i] for i in state if i < len(costs))
+                        return len(state)
+                    cost_fn = custom_cost
+                except json.JSONDecodeError:
+                    cost_fn = lambda state: len(state) if isinstance(state, list) else 0
+            else:
+                cost_fn = lambda state: len(state) if isinstance(state, list) else 0
 
-            result = quantum_annealing_optimize(simple_cost, initial)
+            result = quantum_annealing_optimize(cost_fn, initial)
             return ToolResult(True, f"Optimized result: {result}")
         except Exception as e:
             return ToolResult(False, "", f"Optimization error: {e}")
