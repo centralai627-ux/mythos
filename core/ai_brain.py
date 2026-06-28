@@ -95,6 +95,14 @@ SYS_PROMPTS: Dict[str, str] = {
         "- When user gives ANY do-request: respond ONLY with mythos-tool block. NOTHING ELSE.\n"
         "- No 'I will create...' — CREATE IT.\n"
         "- No 'Let me check...' — CHECK IT.\n\n"
+        "EXAMPLE OF CORRECT TOOL CALL:\n"
+        "User: 'Create a PDF about quantum computing'\n"
+        "Response:\n"
+        "```mythos-tool\n"
+        '{"name": "generate_pdf", "args": {"path": "quantum.pdf", "content": "# Quantum Computing\\n\\nIntroduction...", "title": "Quantum Computing"}}\n'
+        "```\n\n"
+        "WRONG - Do NOT output JSON without mythos-tool fence:\n"
+        '{"name": "generate_pdf", "args": {...}}  <- THIS IS WRONG! You MUST wrap in ```mythos-tool\n\n'
         "=== WHEN TO USE TOOLS (IMPORTANT) ===\n"
         "USE TOOLS when:\n"
         "- User explicitly asks to CREATE, MAKE, WRITE, BUILD, RUN, EXECUTE something\n"

@@ -147,12 +147,14 @@ class ToolRegistry:
                         "Supports headings (#, ##, ###), paragraphs, bullet lists (- or *), "
                         "numbered lists (1. 2.), code blocks (```), blockquotes (>), "
                         "tables (| col | col |), page breaks (---), bold (**text**), "
-                        "and italic (*text*).",
+                        "and italic (*text*). "
+                        "EXAMPLE: {\"name\": \"generate_pdf\", \"args\": {\"path\": \"report.pdf\", "
+                        "\"content\": \"# Title\\n\\nContent here\", \"title\": \"My Report\"}}",
                 "params": {
-                    "path": "string (output .pdf file path)",
-                    "content": "string (markdown-like document content)",
-                    "title": "string (optional, document title)",
-                    "author": "string (optional, document author)",
+                    "path": "string (output .pdf file path, must end with .pdf)",
+                    "content": "string (markdown-like document content with headings, code, etc)",
+                    "title": "string (optional, document title for cover page)",
+                    "author": "string (optional, document author name)",
                 },
                 "run": self._generate_pdf,
             },
