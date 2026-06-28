@@ -75,7 +75,8 @@
         "ide_mode": true,
         "sandbox_mode": false,
         "log_level": "WARNING",
-        "notify_rolling": false
+        "notify_rolling": false,
+        "lock_screen": false
     },
     "optimization": {
         "max_tokens": 2048,
