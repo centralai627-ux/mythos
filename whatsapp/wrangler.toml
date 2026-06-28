@@ -1,0 +1,11 @@
+name = "mythos-whatsapp"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+MYTHOS_NAME = "Mythos AI"
+MYTHOS_VERSION = "1.0.0"
+
+# API Keys (diencrypt di Cloudflare dashboard)
+# OPENROUTER_KEYS = "sk-or-v1-xxx,sk-or-v1-yyy"
+# SHANNON_KEYS = "sk-xxx,sk-yyy"

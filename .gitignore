@@ -1,0 +1,56 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+.env
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Mythos specific
+.mythos_venv/
+.mythos_launchers/
+.mythos/
+*.db
+*.log
+release/
+
+# Desktop app (large files)
+Mythos Desktop/
+Mythos Desktop APp/
+
+# Build
+dist/
+build/
+*.zip
+*.tar.gz
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
