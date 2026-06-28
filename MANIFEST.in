@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include requirements.txt
+include config.json
+include *.py
+recursive-include core *.py
+recursive-include assets *
+recursive-include .mimocode *.md

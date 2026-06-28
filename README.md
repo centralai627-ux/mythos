@@ -16,18 +16,34 @@ Mythos is a powerful AI agent that can code, execute shell commands, search the 
 
 ## Quick Install
 
-### Windows
+### Install via pip (Recommended)
+
+```bash
+# Install globally
+pip install mythos-ai
+
+# Or install from source
+pip install git+https://github.com/centralai627-ux/mythos.git
+
+# Run Mythos
+mythos
+```
+
+### Install from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/mythos-ai/mythos.git
+git clone https://github.com/centralai627-ux/mythos.git
 cd mythos
 
-# Run installer
-python install.py
+# Install in editable mode (development)
+pip install -e .
 
-# Or install globally (adds to PATH)
+# Or install globally
 python install_global.py
+
+# Run Mythos
+mythos
 ```
 
 ### Manual Install
