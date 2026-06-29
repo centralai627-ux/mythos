@@ -1,72 +1,58 @@
 import {
-  mysqlTable,
-  mysqlEnum,
-  serial,
-  varchar,
+  sqliteTable,
   text,
-  timestamp,
-  bigint,
-  int,
-  decimal,
-} from "drizzle-orm/mysql-core";
+  integer,
+  real,
+} from "drizzle-orm/sqlite-core";
 
-export const users = mysqlTable("users", {
-  id: serial("id").primaryKey(),
-  unionId: varchar("unionId", { length: 255 }).notNull().unique(),
-  name: varchar("name", { length: 255 }),
-  email: varchar("email", { length: 320 }),
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  unionId: text("unionId").notNull().unique(),
+  name: text("name"),
+  email: text("email"),
   avatar: text("avatar"),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date()),
-  lastSignInAt: timestamp("lastSignInAt").defaultNow().notNull(),
+  role: text("role", { enum: ["user", "admin"] }).default("user").notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).default(new Date()).notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(new Date()).notNull(),
+  lastSignInAt: integer("lastSignInAt", { mode: "timestamp" }).default(new Date()).notNull(),
 });
 
-export const conversations = mysqlTable("conversations", {
-  id: serial("id").primaryKey(),
-  userId: bigint("userId", { mode: "number", unsigned: true })
+export const conversations = sqliteTable("conversations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  title: varchar("title", { length: 255 }).notNull().default("New Conversation"),
-  model: varchar("model", { length: 100 }).notNull().default("anthropic/claude-sonnet-4"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date()),
+  title: text("title").notNull().default("New Conversation"),
+  model: text("model").notNull().default("anthropic/claude-sonnet-4"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).default(new Date()).notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(new Date()).notNull(),
 });
 
-export const messages = mysqlTable("messages", {
-  id: serial("id").primaryKey(),
-  conversationId: bigint("conversationId", { mode: "number", unsigned: true })
+export const messages = sqliteTable("messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  conversationId: integer("conversationId")
     .notNull()
     .references(() => conversations.id, { onDelete: "cascade" }),
-  role: mysqlEnum("role", ["user", "assistant", "system"]).notNull(),
+  role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
   content: text("content").notNull(),
-  tokensUsed: int("tokensUsed").default(0),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  tokensUsed: integer("tokensUsed").default(0),
+  createdAt: integer("createdAt", { mode: "timestamp" }).default(new Date()).notNull(),
 });
 
-export const chatSettings = mysqlTable("chat_settings", {
-  id: serial("id").primaryKey(),
-  userId: bigint("userId", { mode: "number", unsigned: true })
+export const chatSettings = sqliteTable("chat_settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId")
     .notNull()
     .unique()
     .references(() => users.id, { onDelete: "cascade" }),
-  defaultModel: varchar("defaultModel", { length: 100 })
+  defaultModel: text("defaultModel")
     .notNull()
     .default("anthropic/claude-sonnet-4"),
-  theme: mysqlEnum("theme", ["light", "dark", "auto"]).default("auto").notNull(),
-  temperature: decimal("temperature", { precision: 3, scale: 2 }).default("0.70"),
+  theme: text("theme", { enum: ["light", "dark", "auto"] }).default("auto").notNull(),
+  temperature: real("temperature").default(0.70),
   systemPrompt: text("systemPrompt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt")
-    .defaultNow()
-    .notNull()
-    .$onUpdate(() => new Date()),
+  createdAt: integer("createdAt", { mode: "timestamp" }).default(new Date()).notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).default(new Date()).notNull(),
 });
 
 export type User = typeof users.$inferSelect;

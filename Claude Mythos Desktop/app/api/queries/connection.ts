@@ -1,4 +1,4 @@
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import { env } from "../lib/env";
 import * as schema from "@db/schema";
 import * as relations from "@db/relations";
@@ -9,10 +9,10 @@ let instance: ReturnType<typeof drizzle<typeof fullSchema>>;
 
 export function getDb() {
   if (!instance) {
-    instance = drizzle(env.databaseUrl, {
-      mode: "planetscale",
-      schema: fullSchema,
-    });
+    // Use SQLite database file path from env, or default to local file
+    const dbPath = env.databaseUrl || "./mythos.db";
+    const sqlite = require("better-sqlite3")(dbPath);
+    instance = drizzle(sqlite, { schema: fullSchema });
   }
   return instance;
 }
