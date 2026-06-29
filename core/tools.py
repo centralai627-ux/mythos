@@ -340,6 +340,27 @@ class ToolRegistry:
                 "params": {"vault_path": "string (optional)"},
                 "run": self._obsidian_sync_feed,
             },
+            # Smart AI
+            "smart_reflect": {
+                "desc": "AI self-reflection - critique own response and suggest improvements.",
+                "params": {"question": "string", "response": "string"},
+                "run": self._smart_reflect,
+            },
+            "smart_confidence": {
+                "desc": "Calculate confidence score for a response.",
+                "params": {"question": "string", "response": "string"},
+                "run": self._smart_confidence,
+            },
+            "smart_validate": {
+                "desc": "Validate AI output before showing to user.",
+                "params": {"output": "string", "type": "string (text/code/json)"},
+                "run": self._smart_validate,
+            },
+            "smart_stats": {
+                "desc": "Get Smart AI statistics (mistakes, knowledge, confidence).",
+                "params": {},
+                "run": self._smart_stats,
+            },
         }
 
     @property
@@ -1478,6 +1499,100 @@ class ToolRegistry:
             return ToolResult(False, "", "Sync failed")
         except Exception as e:
             return ToolResult(False, "", f"Sync error: {e}")
+
+    # ----------------------- Smart AI Tools ----------------------- #
+    def _smart_reflect(self, question: str = "", response: str = "", **_) -> ToolResult:
+        """AI self-reflection."""
+        try:
+            from .smart_ai import smart_ai
+            if not question or not response:
+                return ToolResult(False, "", "Both question and response are required")
+            
+            reflection = smart_ai.reflect_on_response(question, response)
+            
+            result = f"Self-Reflection:\n"
+            result += f"Confidence: {reflection['confidence']:.0%}\n"
+            
+            if reflection["issues"]:
+                result += f"\nIssues found:\n"
+                for issue in reflection["issues"]:
+                    result += f"  ⚠ {issue}\n"
+            
+            if reflection["suggestions"]:
+                result += f"\nSuggestions:\n"
+                for suggestion in reflection["suggestions"]:
+                    result += f"  💡 {suggestion}\n"
+            
+            return ToolResult(True, result)
+        except Exception as e:
+            return ToolResult(False, "", f"Smart AI error: {e}")
+
+    def _smart_confidence(self, question: str = "", response: str = "", **_) -> ToolResult:
+        """Calculate confidence score."""
+        try:
+            from .smart_ai import smart_ai
+            if not question or not response:
+                return ToolResult(False, "", "Both question and response are required")
+            
+            confidence = smart_ai.calculate_confidence(question, response)
+            
+            emoji = "🟢" if confidence >= 0.8 else "🟡" if confidence >= 0.6 else "🔴"
+            result = f"{emoji} Confidence: {confidence:.0%}\n"
+            
+            if confidence < 0.7:
+                result += "\nLow confidence - consider:\n"
+                result += "  - Providing more details\n"
+                result += "  - Using tools for verification\n"
+                result += "  - Asking for clarification\n"
+            
+            return ToolResult(True, result)
+        except Exception as e:
+            return ToolResult(False, "", f"Smart AI error: {e}")
+
+    def _smart_validate(self, output: str = "", type: str = "text", **_) -> ToolResult:
+        """Validate AI output."""
+        try:
+            from .smart_ai import smart_ai
+            if not output:
+                return ToolResult(False, "", "Output is required")
+            
+            validation = smart_ai.validate_output(output, type)
+            
+            if validation["is_valid"]:
+                result = f"✅ Output valid ({type})"
+            else:
+                result = f"❌ Output invalid ({type})\n"
+                for issue in validation["issues"]:
+                    result += f"  - {issue}\n"
+            
+            if validation.get("suggestions"):
+                result += "\nSuggestions:\n"
+                for suggestion in validation["suggestions"]:
+                    result += f"  💡 {suggestion}\n"
+            
+            return ToolResult(True, result)
+        except Exception as e:
+            return ToolResult(False, "", f"Smart AI error: {e}")
+
+    def _smart_stats(self, **_) -> ToolResult:
+        """Get Smart AI statistics."""
+        try:
+            from .smart_ai import smart_ai
+            stats = smart_ai.get_stats()
+            
+            result = f"Smart AI Stats:\n"
+            result += f"Total mistakes recorded: {stats['total_mistakes']}\n"
+            result += f"Knowledge entries: {stats['knowledge_entries']}\n"
+            result += f"Average confidence: {stats['avg_confidence']:.0%}\n"
+            
+            if stats.get('most_common_errors'):
+                result += f"\nMost common errors:\n"
+                for error in stats['most_common_errors']:
+                    result += f"  - {error}\n"
+            
+            return ToolResult(True, result)
+        except Exception as e:
+            return ToolResult(False, "", f"Smart AI error: {e}")
 
     # ----------------------- Execution ----------------------- #
     def execute(self, call: ToolCall) -> ToolResult:
