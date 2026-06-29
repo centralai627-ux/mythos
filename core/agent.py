@@ -7,6 +7,7 @@ Runs the REPL loop, handles slash commands, executes AI-emitted actions.
 from __future__ import annotations
 import os
 import sys
+import re
 import time
 from typing import Optional, Dict, Any, List
 
@@ -17,7 +18,7 @@ from .key_manager import KeyManager
 from .api_client import MythosAPI
 from .executor import ShellExecutor, ExecResult
 from .ai_brain import MythosBrain
-from .vision import MythosVision
+from .vision import MythosVision, IMAGE_EXTS
 from .tools import ToolRegistry
 from .ui import MythosUI
 from .commands import CommandRegistry
@@ -140,6 +141,12 @@ class MythosAgent:
         self.executor.cwd = self.cwd
         self.tools.cwd = self.cwd
 
+        # Auto-detect image attachments and route to vision model.
+        image_path, question = self._detect_image_attachment(user_text)
+        if image_path:
+            self._analyze_image_with_context(image_path, question)
+            return
+
         # Show thinking indicator with model info.
         self.ui.ai_thinking("Processing", self.brain.current_model)
 
@@ -208,6 +215,58 @@ class MythosAgent:
         self.ui.spinner("analyzing via Mythos-Vision...", duration=0.1)
         result = self.vision.analyze_file(full, question)
         self.ui.assistant(result, model="mythos-vision")
+
+    def _detect_image_attachment(self, text: str) -> tuple:
+        """
+        Detect image file paths in user input.
+        Returns (image_path, question) or (None, None) if no image found.
+        
+        Supported patterns:
+        - Direct path: "analyze this image.png"
+        - Quoted path: "look at 'my screenshot.jpg'"
+        - Path with question: "what is in photo.png?"
+        """
+        # Pattern 1: Quoted path
+        quoted = re.search(r"['\"]([^'\"]+\.(?:png|jpg|jpeg|gif|webp|bmp))['\"]", text, re.IGNORECASE)
+        if quoted:
+            img_path = quoted.group(1)
+            question = text[:quoted.start()].strip() + " " + text[quoted.end():].strip()
+            return (img_path, question.strip() or "Describe this image in detail.")
+        
+        # Pattern 2: Unquoted path (word ending with image extension)
+        unquoted = re.search(r'(?:^|\s)(\S+\.(?:png|jpg|jpeg|gif|webp|bmp))(?:\s|$|\.|\?)', text, re.IGNORECASE)
+        if unquoted:
+            img_path = unquoted.group(1)
+            # Check if file exists
+            full_path = img_path if os.path.isabs(img_path) else os.path.join(self.cwd, img_path)
+            if os.path.isfile(full_path):
+                question = text[:unquoted.start()].strip() + " " + text[unquoted.end():].strip()
+                return (img_path, question.strip() or "Describe this image in detail.")
+        
+        return (None, None)
+
+    def _analyze_image_with_context(self, image_path: str, question: str) -> None:
+        """Analyze image with vision model and show result with context."""
+        full = image_path if os.path.isabs(image_path) else os.path.join(self.cwd, image_path)
+        
+        # Verify file exists
+        if not os.path.isfile(full):
+            self.ui.error(f"Image not found: {full}")
+            return
+        
+        # Check file extension
+        ext = os.path.splitext(full)[1].lower()
+        if ext not in IMAGE_EXTS:
+            self.ui.error(f"Not an image file: {ext}")
+            return
+        
+        self.ui.spinner("analyzing image via Mythos-Vision...", duration=0.1)
+        
+        try:
+            result = self.vision.analyze_file(full, question)
+            self.ui.assistant(result, model="mythos-vision")
+        except Exception as e:
+            self.ui.error(f"Vision analysis failed: {e}")
 
     def _read_pdf_context(self, path: str) -> None:
         """Read a PDF file and load its text into conversation context."""
