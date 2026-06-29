@@ -324,6 +324,10 @@ class LockScreen:
     MAX_ATTEMPTS = 5
     LOCKOUT_SECONDS = 60
 
+    # Class-level flag: ensures lock screen runs only ONCE per process lifetime.
+    # Prevents double-trigger when autostart + --lock both fire.
+    _already_ran = False
+
     def __init__(self, use_guardian: bool = True) -> None:
         self.console = Console(theme=LOCK_THEME, highlight=False)
         self._attempts: int = 0
@@ -357,6 +361,12 @@ class LockScreen:
             "unlock" — user answered correctly (proceed to Mythos)
             "close"  — user chose to close the terminal
         """
+        # Only run lock screen ONCE per process lifetime.
+        # Prevents double-trigger when autostart + --lock both fire.
+        if LockScreen._already_ran:
+            return "unlock"
+        LockScreen._already_ran = True
+
         # Arm anti-bypass guardian BEFORE fullscreen (block escape keys first).
         # v2 returns a status dict so we know exactly what protection is active.
         self._protection_status = {"hook": False, "watcher": False,
