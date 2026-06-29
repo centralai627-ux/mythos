@@ -308,6 +308,27 @@ class ToolRegistry:
                 "params": {"source": "string (source note path)", "target": "string (target note name)"},
                 "run": self._obsidian_link_notes,
             },
+            # Feed & Timeline
+            "feed_add": {
+                "desc": "Add an activity to Mythos feed (like a social media post).",
+                "params": {"type": "string (note/task/achievement/idea)", "title": "string", "content": "string", "tags": "string (comma-separated)"},
+                "run": self._feed_add,
+            },
+            "feed_view": {
+                "desc": "View recent activities in Mythos feed.",
+                "params": {"limit": "int (default 10)", "type": "string (optional filter)"},
+                "run": self._feed_view,
+            },
+            "feed_search": {
+                "desc": "Search activities in Mythos feed.",
+                "params": {"query": "string"},
+                "run": self._feed_search,
+            },
+            "feed_stats": {
+                "desc": "Get feed statistics (total activities, today, this week).",
+                "params": {},
+                "run": self._feed_stats,
+            },
         }
 
     @property
@@ -1325,6 +1346,79 @@ class ToolRegistry:
             return ToolResult(True, f"Link added: {source} -> [[{target}]]")
         except Exception as e:
             return ToolResult(False, "", f"Obsidian error: {e}")
+
+    # ----------------------- Feed Tools ----------------------- #
+    def _feed_add(self, type: str = "note", title: str = "", content: str = "", tags: str = "", **_) -> ToolResult:
+        """Add an activity to Mythos feed."""
+        try:
+            from .feed import feed
+            if not title:
+                return ToolResult(False, "", "Title is required")
+            
+            tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+            activity = feed.add_activity(type, title, content, tag_list)
+            return ToolResult(True, f"Activity added: {title} (#{activity['id']})")
+        except Exception as e:
+            return ToolResult(False, "", f"Feed error: {e}")
+
+    def _feed_view(self, limit: int = 10, type: str = "", **_) -> ToolResult:
+        """View recent activities in feed."""
+        try:
+            from .feed import feed
+            activities = feed.get_feed(limit, type if type else None)
+            
+            if not activities:
+                return ToolResult(True, "No activities yet. Add one with feed_add!")
+            
+            result = f"Recent activities ({len(activities)}):\n\n"
+            for a in activities:
+                emoji = {"note": "📝", "task": "✅", "achievement": "🏆", "idea": "💡"}.get(a["type"], "📌")
+                result += f"{emoji} [{a['type']}] {a['title']}\n"
+                if a["content"]:
+                    result += f"   {a['content'][:100]}...\n"
+                result += f"   {a['timestamp'][:16]} | {a['likes']} likes | {len(a['comments'])} comments\n\n"
+            
+            return ToolResult(True, result)
+        except Exception as e:
+            return ToolResult(False, "", f"Feed error: {e}")
+
+    def _feed_search(self, query: str = "", **_) -> ToolResult:
+        """Search activities in feed."""
+        try:
+            from .feed import feed
+            if not query:
+                return ToolResult(False, "", "Search query is required")
+            
+            results = feed.search_activities(query)
+            if not results:
+                return ToolResult(True, f"No results for: {query}")
+            
+            output = f"Found {len(results)} results:\n"
+            for a in results[:10]:
+                output += f"- {a['title']} ({a['type']})\n"
+            return ToolResult(True, output)
+        except Exception as e:
+            return ToolResult(False, "", f"Feed error: {e}")
+
+    def _feed_stats(self, **_) -> ToolResult:
+        """Get feed statistics."""
+        try:
+            from .feed import feed
+            stats = feed.get_stats()
+            
+            result = f"Mythos Feed Stats:\n"
+            result += f"Total: {stats['total']} activities\n"
+            result += f"Today: {stats['today']}\n"
+            result += f"This week: {stats['this_week']}\n"
+            
+            if stats.get('by_type'):
+                result += "\nBy type:\n"
+                for t, count in stats['by_type'].items():
+                    result += f"  {t}: {count}\n"
+            
+            return ToolResult(True, result)
+        except Exception as e:
+            return ToolResult(False, "", f"Feed error: {e}")
 
     # ----------------------- Execution ----------------------- #
     def execute(self, call: ToolCall) -> ToolResult:
