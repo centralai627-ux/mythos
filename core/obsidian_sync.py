@@ -22,6 +22,7 @@ class ObsidianSync:
         """Auto-detect Obsidian vault location."""
         home = os.path.expanduser("~")
         candidates = [
+            os.path.join(home, "Documents", "Obsidian Vault"),
             os.path.join(home, "Documents", "Obsidian"),
             os.path.join(home, "Obsidian"),
             os.path.join(home, "vault"),
@@ -39,7 +40,7 @@ class ObsidianSync:
                         if os.path.isdir(obsidian_dir):
                             return subdir_path
         
-        return os.path.join(home, "Documents", "Obsidian", "Mythos")
+        return os.path.join(home, "Documents", "Obsidian Vault")
     
     def set_vault(self, path: str) -> bool:
         """Set vault path manually."""

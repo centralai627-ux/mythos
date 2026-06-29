@@ -25,6 +25,7 @@ class ObsidianVault:
         # Common Obsidian vault locations
         home = os.path.expanduser("~")
         candidates = [
+            os.path.join(home, "Documents", "Obsidian Vault"),
             os.path.join(home, "Documents", "Obsidian"),
             os.path.join(home, "Obsidian"),
             os.path.join(home, "vault"),
@@ -45,8 +46,8 @@ class ObsidianVault:
                         if os.path.isdir(obsidian_dir):
                             return subdir_path
         
-        # Default fallback
-        return os.path.join(home, "Documents", "Obsidian", "Mythos")
+        # Default fallback - use the found vault
+        return os.path.join(home, "Documents", "Obsidian Vault")
     
     def set_vault(self, path: str) -> bool:
         """Set vault path manually."""
