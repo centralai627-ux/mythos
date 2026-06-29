@@ -20,6 +20,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import locale
 from typing import Optional, Tuple, List, Dict
 from dataclasses import dataclass, field
 
@@ -59,7 +60,8 @@ class ShellExecutor:
     def __init__(self, cwd: Optional[str] = None) -> None:
         self.cwd = cwd or os.getcwd()
         self._lock = threading.Lock()
-        self._encoding = "utf-8"
+        # Use system's preferred encoding for CMD (handles non-ASCII output)
+        self._encoding = locale.getpreferredencoding(False) or "utf-8"
 
     # ----------------------- Detection ----------------------- #
     def detect_shells(self) -> Dict[str, Optional[str]]:
@@ -129,18 +131,28 @@ class ShellExecutor:
     # ----------------------- Shell-specific runners ----------------------- #
     def _auto_detect(self, command: str) -> str:
         """Pick shell based on command content."""
-        # PowerShell-ish patterns.
+        # PowerShell-specific cmdlets and syntax.
         ps_patterns = [
             r"Get-\w+", r"Set-\w+", r"New-\w+", r"Remove-\w+",
-            r"\$\w+", r"^\s*-", r"\| ?Where-Object", r"Write-",
+            r"^\s*-", r"\| ?Where-Object", r"Write-",
             r"Invoke-", r"Select-String", r"-Filter\b", r"-Name\b",
         ]
         for pat in ps_patterns:
             if re.search(pat, command):
                 return "powershell"
-        # Bash-ish patterns.
-        if any(tok in command for tok in ("&&", "||", ">", "|")):
-            return self.best_shell()
+        
+        # Check for PowerShell variables (but be more careful - only match clear PS vars)
+        # Match $VariableName but not $env:PATH (which is also valid in CMD context)
+        if re.search(r"\$[A-Za-z_]\w*(?!\s*:)", command):
+            return "powershell"
+        
+        # Pipes, redirects, && / || - default to CMD on Windows
+        # because CMD handles these natively and PowerShell aliases differ
+        if any(tok in command for tok in ("|", "&&", "||", ">")):
+            if os.name == "nt":
+                return "cmd"
+            return "bash"
+        
         return self.best_shell()
 
     def _run_cmd(self, command: str, timeout: float, cwd: str) -> ExecResult:
@@ -168,6 +180,8 @@ class ShellExecutor:
         ps_script = (
             "$ErrorActionPreference='Continue'\n"
             f"{command}\n"
+            # Capture cmdlet failures: if $? is False, set LASTEXITCODE to 1
+            "if (-not $?) { $LASTEXITCODE = 1 }\n"
             "Write-Output \"__MYTHOS_EXIT__:$LASTEXITCODE\"\n"
         )
         fd, tmp_ps1 = _tf.mkstemp(suffix=".ps1")
@@ -189,13 +203,12 @@ class ShellExecutor:
         out = proc.stdout or ""
         stderr = proc.stderr or ""
         body, exit_code = self._extract_exit(out)
-        if stderr.strip():
-            body = (body + ("\n" if body else "") + stderr).strip()
+        # Keep stderr separate (don't merge into stdout)
         return ExecResult(
-            success=(exit_code == 0),
+            success=(exit_code == 0 and not stderr.strip()),
             exit_code=exit_code,
             stdout=body,
-            stderr="",
+            stderr=stderr,
         )
 
     def _extract_exit(self, raw: str) -> Tuple[str, int]:
