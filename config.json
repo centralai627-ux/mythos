@@ -69,7 +69,7 @@
         "code": "poolside/laguna-xs.2:free",
         "code-alt": "poolside/laguna-m.1:free",
         "ultra": "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "vision": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+        "vision": "google/gemma-4-31b-it:free"
     },
     "system": {
         "ide_mode": true,
