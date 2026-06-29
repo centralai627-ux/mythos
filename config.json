@@ -72,6 +72,13 @@
         "ultra": "nvidia/nemotron-3-ultra-550b-a55b:free",
         "vision": "google/gemma-4-31b-it:free"
     },
+    "model_info": {
+        "poolside/laguna-xs.2:free": {"speed": "fastest", "size": "XS"},
+        "poolside/laguna-m.1:free": {"speed": "fast", "size": "M"},
+        "nvidia/nemotron-3-super-120b-a12b:free": {"speed": "slow", "size": "120B"},
+        "nvidia/nemotron-3-ultra-550b-a55b:free": {"speed": "very_slow", "size": "550B"},
+        "google/gemma-4-31b-it:free": {"speed": "fast", "size": "31B", "multimodal": true}
+    },
     "system": {
         "ide_mode": true,
         "sandbox_mode": false,
@@ -80,9 +87,9 @@
         "lock_screen": false
     },
     "optimization": {
-        "max_tokens": 2048,
-        "max_turns": 150,
-        "stream_response": false,
+        "max_tokens": 1024,
+        "max_turns": 50,
+        "stream_response": true,
         "fast_model_priority": true
     }
 }
