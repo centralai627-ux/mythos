@@ -1004,6 +1004,17 @@ class ToolRegistry:
 
             inp = json.loads(inputs) if inputs else []
             w = json.loads(weights) if weights else [[]]
+            
+            # Validate dimensions
+            if not inp:
+                return ToolResult(False, "", "Inputs cannot be empty")
+            if not w or not w[0]:
+                return ToolResult(False, "", "Weights cannot be empty")
+            for i, neuron_w in enumerate(w):
+                if len(neuron_w) != len(inp):
+                    return ToolResult(False, "", 
+                        f"Dimension mismatch: neuron {i} has {len(neuron_w)} weights but input has {len(inp)} values")
+            
             result = quantum_neural_network(inp, w, activation)
             return ToolResult(True, f"Neural output: {result}")
         except Exception as e:
@@ -1018,8 +1029,20 @@ class ToolRegistry:
             d = json.loads(data) if data else []
             nc = int(n_clusters) if n_clusters else 3
             iters = int(iterations) if iterations else 100
+            
+            # Validate inputs
+            if not d:
+                return ToolResult(False, "", "Data cannot be empty")
+            if nc <= 0:
+                return ToolResult(False, "", "Number of clusters must be positive")
+            
+            # Warning if n_clusters > data points
+            warning = ""
+            if nc > len(d):
+                warning = f" Warning: n_clusters ({nc}) > data points ({len(d)}), results may be suboptimal."
+            
             result = quantum_cluster(d, nc, iters)
-            return ToolResult(True, f"Cluster assignments: {result}")
+            return ToolResult(True, f"Cluster assignments: {result}{warning}")
         except Exception as e:
             return ToolResult(False, "", f"Cluster error: {e}")
 
@@ -1030,8 +1053,28 @@ class ToolRegistry:
             from .quantum import quantum_pathfind
 
             g = json.loads(graph) if graph else {}
+            
+            # Validate inputs
+            if not g:
+                return ToolResult(False, "", "Graph cannot be empty")
+            if not start:
+                return ToolResult(False, "", "Start node is required")
+            if not end:
+                return ToolResult(False, "", "End node is required")
+            
+            # Validate nodes exist in graph
+            if start not in g:
+                return ToolResult(False, "", f"Start node '{start}' not found in graph. Available nodes: {list(g.keys())}")
+            if end not in g:
+                return ToolResult(False, "", f"End node '{end}' not found in graph. Available nodes: {list(g.keys())}")
+            
             path, weight = quantum_pathfind(g, start, end)
-            return ToolResult(True, f"Path: {path}, Weight: {weight}")
+            
+            # Check if path was found
+            if not path:
+                return ToolResult(True, f"No path found from '{start}' to '{end}'")
+            
+            return ToolResult(True, f"Path: {path}, Total weight: {weight}")
         except Exception as e:
             return ToolResult(False, "", f"Pathfind error: {e}")
 
@@ -1039,6 +1082,13 @@ class ToolRegistry:
         """Quantum encryption."""
         try:
             from .quantum import quantum_encrypt
+            
+            # Validate inputs
+            if not data:
+                return ToolResult(False, "", "Data to encrypt cannot be empty")
+            if not key or not key.strip():
+                return ToolResult(False, "", "Encryption key cannot be empty")
+            
             result = quantum_encrypt(data, key)
             return ToolResult(True, f"Encrypted: {result}")
         except Exception as e:
@@ -1048,6 +1098,21 @@ class ToolRegistry:
         """Quantum decryption."""
         try:
             from .quantum import quantum_decrypt
+            
+            # Validate inputs
+            if not encrypted:
+                return ToolResult(False, "", "Encrypted data cannot be empty")
+            if not key or not key.strip():
+                return ToolResult(False, "", "Decryption key cannot be empty")
+            
+            # Validate hex format
+            if len(encrypted) % 2 != 0:
+                return ToolResult(False, "", "Invalid encrypted data: must be even-length hex string")
+            try:
+                int(encrypted, 16)
+            except ValueError:
+                return ToolResult(False, "", "Invalid encrypted data: contains non-hex characters")
+            
             result = quantum_decrypt(encrypted, key)
             return ToolResult(True, f"Decrypted: {result}")
         except Exception as e:
@@ -1087,8 +1152,17 @@ class ToolRegistry:
 
             d = json.loads(data) if data else []
             s = int(steps) if steps else 5
+            
+            # Validate inputs
+            if not d:
+                return ToolResult(False, "", "Data cannot be empty")
+            if len(d) < 2:
+                return ToolResult(False, "", f"Need at least 2 data points for forecasting, got {len(d)}")
+            if s <= 0:
+                return ToolResult(False, "", "Forecast steps must be positive")
+            
             result = quantum_time_series_forecast(d, s)
-            return ToolResult(True, f"Forecast: {result}")
+            return ToolResult(True, f"Forecast ({s} steps): {result}")
         except Exception as e:
             return ToolResult(False, "", f"Forecast error: {e}")
 
