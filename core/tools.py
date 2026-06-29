@@ -272,6 +272,42 @@ class ToolRegistry:
                 "params": {"features": "string (JSON array)", "data": "string (JSON array)", "target": "string"},
                 "run": self._quantum_importance,
             },
+            # Obsidian Integration
+            "obsidian_set_vault": {
+                "desc": "Set Obsidian vault path. Call this first before other Obsidian tools.",
+                "params": {"path": "string (path to Obsidian vault folder)"},
+                "run": self._obsidian_set_vault,
+            },
+            "obsidian_list_notes": {
+                "desc": "List all notes in Obsidian vault.",
+                "params": {"folder": "string (optional, subfolder to list)", "recursive": "bool (default true)"},
+                "run": self._obsidian_list_notes,
+            },
+            "obsidian_read_note": {
+                "desc": "Read a note from Obsidian vault.",
+                "params": {"note_path": "string (path relative to vault, e.g. 'notes/my-note.md')"},
+                "run": self._obsidian_read_note,
+            },
+            "obsidian_write_note": {
+                "desc": "Write/create a note in Obsidian vault.",
+                "params": {"note_path": "string (path relative to vault)", "content": "string (markdown content)", "tags": "string (optional, comma-separated tags)"},
+                "run": self._obsidian_write_note,
+            },
+            "obsidian_search": {
+                "desc": "Search notes in Obsidian vault by content or title.",
+                "params": {"query": "string (search term)", "folder": "string (optional, limit to subfolder)"},
+                "run": self._obsidian_search,
+            },
+            "obsidian_daily_note": {
+                "desc": "Create or read today's daily note in Obsidian.",
+                "params": {"content": "string (optional, content for the note)"},
+                "run": self._obsidian_daily_note,
+            },
+            "obsidian_link_notes": {
+                "desc": "Add a link from one note to another in Obsidian.",
+                "params": {"source": "string (source note path)", "target": "string (target note name)"},
+                "run": self._obsidian_link_notes,
+            },
         }
 
     @property
@@ -1178,6 +1214,117 @@ class ToolRegistry:
             return ToolResult(True, f"Feature importance: {result}")
         except Exception as e:
             return ToolResult(False, "", f"Importance error: {e}")
+
+    # ----------------------- Obsidian Tools ----------------------- #
+    def _obsidian_set_vault(self, path: str = "", **_) -> ToolResult:
+        """Set Obsidian vault path."""
+        try:
+            from .obsidian import obsidian
+            if not path:
+                return ToolResult(True, f"Current vault: {obsidian.vault_path}")
+            if obsidian.set_vault(path):
+                return ToolResult(True, f"Vault set to: {path}")
+            return ToolResult(False, "", f"Invalid vault path: {path}")
+        except Exception as e:
+            return ToolResult(False, "", f"Obsidian error: {e}")
+
+    def _obsidian_list_notes(self, folder: str = "", recursive: bool = True, **_) -> ToolResult:
+        """List notes in Obsidian vault."""
+        try:
+            from .obsidian import obsidian
+            notes = obsidian.list_notes(folder, recursive)
+            if not notes:
+                return ToolResult(True, "No notes found in vault.")
+            
+            result = f"Found {len(notes)} notes:\n"
+            for note in notes[:20]:
+                result += f"- {note['path']} ({note['size']} bytes)\n"
+            if len(notes) > 20:
+                result += f"... and {len(notes) - 20} more"
+            return ToolResult(True, result)
+        except Exception as e:
+            return ToolResult(False, "", f"Obsidian error: {e}")
+
+    def _obsidian_read_note(self, note_path: str = "", **_) -> ToolResult:
+        """Read a note from Obsidian vault."""
+        try:
+            from .obsidian import obsidian
+            if not note_path:
+                return ToolResult(False, "", "Note path is required")
+            
+            result = obsidian.read_note(note_path)
+            if "error" in result:
+                return ToolResult(False, "", result["error"])
+            
+            content = result["content"]
+            if len(content) > 10000:
+                content = content[:10000] + "\n... [truncated]"
+            
+            return ToolResult(True, f"Note: {note_path}\n\n{content}")
+        except Exception as e:
+            return ToolResult(False, "", f"Obsidian error: {e}")
+
+    def _obsidian_write_note(self, note_path: str = "", content: str = "", tags: str = "", **_) -> ToolResult:
+        """Write/create a note in Obsidian vault."""
+        try:
+            from .obsidian import obsidian
+            if not note_path:
+                return ToolResult(False, "", "Note path is required")
+            
+            frontmatter = {}
+            if tags:
+                frontmatter["tags"] = tags
+            
+            result = obsidian.write_note(note_path, content, frontmatter)
+            if "error" in result:
+                return ToolResult(False, "", result["error"])
+            
+            return ToolResult(True, f"Note created: {note_path} ({result['size']} bytes)")
+        except Exception as e:
+            return ToolResult(False, "", f"Obsidian error: {e}")
+
+    def _obsidian_search(self, query: str = "", folder: str = "", **_) -> ToolResult:
+        """Search notes in Obsidian vault."""
+        try:
+            from .obsidian import obsidian
+            if not query:
+                return ToolResult(False, "", "Search query is required")
+            
+            results = obsidian.search_notes(query, folder)
+            if not results:
+                return ToolResult(True, f"No results found for: {query}")
+            
+            output = f"Found {len(results)} results for '{query}':\n"
+            for r in results[:10]:
+                output += f"- {r['path']} ({r['matches']} matches): {r['preview']}\n"
+            return ToolResult(True, output)
+        except Exception as e:
+            return ToolResult(False, "", f"Obsidian error: {e}")
+
+    def _obsidian_daily_note(self, content: str = "", **_) -> ToolResult:
+        """Create or read today's daily note."""
+        try:
+            from .obsidian import obsidian
+            result = obsidian.create_daily_note(content)
+            if "error" in result:
+                return ToolResult(False, "", result["error"])
+            return ToolResult(True, f"Daily note created: {result['path']}")
+        except Exception as e:
+            return ToolResult(False, "", f"Obsidian error: {e}")
+
+    def _obsidian_link_notes(self, source: str = "", target: str = "", **_) -> ToolResult:
+        """Add a link from source note to target note."""
+        try:
+            from .obsidian import obsidian
+            if not source or not target:
+                return ToolResult(False, "", "Both source and target are required")
+            
+            result = obsidian.link_notes(source, target)
+            if "error" in result:
+                return ToolResult(False, "", result["error"])
+            return ToolResult(True, f"Link added: {source} -> [[{target}]]")
+        except Exception as e:
+            return ToolResult(False, "", f"Obsidian error: {e}")
 
     # ----------------------- Execution ----------------------- #
     def execute(self, call: ToolCall) -> ToolResult:
