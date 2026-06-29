@@ -69,7 +69,7 @@
         "code": "poolside/laguna-xs.2:free",
         "code-alt": "poolside/laguna-m.1:free",
         "ultra": "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "vision": "llava/hf-llava-v1.5-7b"
+        "vision": "openai/gpt-4o-mini"
     },
     "system": {
         "ide_mode": true,
