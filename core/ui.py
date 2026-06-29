@@ -51,12 +51,24 @@ GLASS_THEME = Theme({
     "shell.cmd": "bold #7ff0ff",
 })
 
-# ASCII wing motif for Windows compatibility.
+# Unicode symbols for professional look
+SYM_CHECK = "✓"
+SYM_CROSS = "✗"
+SYM_ARROW = "→"
+SYM_DIAMOND = "◆"
+SYM_STAR = "★"
+SYM_LIGHTNING = "⚡"
+SYM_GEAR = "⟳"
+SYM_BLOCK_FULL = "█"
+SYM_BLOCK_EMPTY = "░"
+SYM_BLOCK_MED = "▓"
+
+# Wing motif with Unicode
 _WING = (
-    "---/\\  "
-    "*-----"
-    "-----*"
-    "  /\\---"
+    "═══╪══  "
+    "◆═════"
+    "═════◆"
+    "  ╪═══"
 )
 
 
@@ -131,13 +143,13 @@ class MythosUI:
         self.console.print()
 
     def _progress_bar(self, pct: int, width: int = 24) -> Text:
-        """Inline progress bar:  ▓▓▓▓▓▓▓▓░░░░░░░░  60%"""
+        """Inline progress bar with Unicode blocks: ████░░░░ 60%"""
         filled = max(0, int(width * pct / 100))
         empty = width - filled
         return Text.assemble(
             "    ",
-            ("#" * filled, "crystal"),
-            ("-" * empty, "glass.edge.soft"),
+            (SYM_BLOCK_FULL * filled, "crystal"),
+            (SYM_BLOCK_EMPTY * empty, "glass.edge.soft"),
             (f"  {pct:3d}%", "glass.dim"),
         )
 
@@ -233,7 +245,7 @@ class MythosUI:
         self.console.print(Padding.indent(chip, 2))
 
     def observation(self, output: str, ok: bool, step: int) -> None:
-        icon = "\u2713" if ok else "\u2717"
+        icon = SYM_CHECK if ok else SYM_CROSS
         style = "obs.t" if ok else "err"
         head = Text.assemble(
             (f"{icon} ", style), (f"#{step}  ", style),
@@ -246,12 +258,12 @@ class MythosUI:
                   title=head, title_align="left", padding=(0, 1)), 4))
 
     def shell_output(self, result: Any) -> None:
-        icon = "\u2713" if result.success else "\u2717"
+        icon = SYM_CHECK if result.success else SYM_CROSS
         st = "ok" if result.success else "err"
         head = Text.assemble(
             (f"{icon} ", st), ("SHELL ", "shell.cmd"),
             (f"{result.shell.upper()} ", "crystal"),
-            (f"\u00b7 {result.duration:.2f}s \u00b7 exit {result.exit_code}",
+            (f" {SYM_DIAMOND} {result.duration:.2f}s {SYM_DIAMOND} exit {result.exit_code}",
              "glass.dim"),
         )
         lines = [Text(f"$ {result.command}", style="shell.cmd"), Text("")]
@@ -446,27 +458,27 @@ class MythosUI:
     # ======================= Status ======================= #
     def info(self, m: str) -> None:
         self.console.print(Text.assemble(
-            ("  > ", "info"), (m, "info")))
+            (f"  {SYM_ARROW} ", "info"), (m, "info")))
 
     def success(self, m: str) -> None:
         self.console.print(Text.assemble(
-            ("  \u2713 ", "ok"), (m, "ok")))
+            (f"  {SYM_CHECK} ", "ok"), (m, "ok")))
 
     def warn(self, m: str) -> None:
         self.console.print(Text.assemble(
-            ("  \u26a0 ", "warn"), (m, "warn")))
+            (f"  {SYM_DIAMOND} ", "warn"), (m, "warn")))
 
     def error(self, m: str) -> None:
         self.console.print(Text.assemble(
-            ("  \u2717 ", "err"), (m, "err")))
+            (f"  {SYM_CROSS} ", "err"), (m, "err")))
 
     def divider(self, label: str = "") -> None:
         if label:
             self.console.print(Rule(
                 title=Text(f" {label} ", style="crystal"),
-                style="glass.edge.soft", characters="-"))
+                style="glass.edge.soft", characters="─"))
         else:
-            self.console.print(Rule(style="glass.edge.soft", characters="-"))
+            self.console.print(Rule(style="glass.edge.soft", characters="─"))
 
     def spinner(self, msg: str, duration: Optional[float] = None) -> None:
         sp = Spinner("dots12", text=Text(f"  {msg}", style="crystal"))
