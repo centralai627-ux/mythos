@@ -301,6 +301,8 @@ class MythosAgent:
         mapping = {
             "code": "mythos-code",
             "code-alt": "mythos-code-alt",
+            "code-super": "mythos-code-super",
+            "super": "mythos-code-super",
             "ultra": "mythos-ultra",
             "vision": "mythos-vision",
             "5": "mythos-5",
@@ -315,7 +317,7 @@ class MythosAgent:
             self.ui.success(f"Active model: {target}")
         else:
             self.ui.error(
-                "Unknown model. Options: code, code-alt, ultra, vision, 5 (Mythos-5), 5-pro"
+                "Unknown model. Options: code, code-alt, code-super, ultra, vision, 5 (Mythos-5), 5-pro"
             )
 
     def _show_history(self) -> None:

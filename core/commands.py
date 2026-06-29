@@ -363,6 +363,7 @@ class CommandRegistry:
         models = {
             "code": "Mythos Code (fast)",
             "code-alt": "Mythos Code Alt",
+            "code-super": "Mythos Code Super (120B)",
             "ultra": "Mythos Ultra (powerful)",
             "vision": "Mythos Vision (multimodal)",
             "5": "Mythos-5 (Shannon)",

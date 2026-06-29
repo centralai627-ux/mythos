@@ -16,7 +16,9 @@ from .key_manager import KeyManager
 
 # --- Public model aliases (user-facing). Real ids resolved internally. ---
 MODEL_ALIASES: Dict[str, str] = {
-    "mythos-code": "code",   # Default for all coding/shell tasks.
+    "mythos-code": "code",   # Default for all coding/shell tasks (fastest).
+    "mythos-code-alt": "code-alt",  # Alternative code model.
+    "mythos-code-super": "code-super",  # Super code model (120B).
     "mythos-ultra": "ultra", # Complex reasoning fallback.
     "mythos-vision": "vision",  # Image / file analysis.
     "mythos-5": "shannon-1", # Shannon Coder 1 (primary) - branded Mythos 5.
