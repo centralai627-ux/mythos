@@ -329,6 +329,17 @@ class ToolRegistry:
                 "params": {},
                 "run": self._feed_stats,
             },
+            # Obsidian Sync
+            "obsidian_sync": {
+                "desc": "Sync all Mythos data (feed, notes, projects) to Obsidian vault.",
+                "params": {"vault_path": "string (optional, Obsidian vault path)"},
+                "run": self._obsidian_sync,
+            },
+            "obsidian_sync_feed": {
+                "desc": "Sync Mythos feed activities to Obsidian vault.",
+                "params": {"vault_path": "string (optional)"},
+                "run": self._obsidian_sync_feed,
+            },
         }
 
     @property
@@ -1419,6 +1430,54 @@ class ToolRegistry:
             return ToolResult(True, result)
         except Exception as e:
             return ToolResult(False, "", f"Feed error: {e}")
+
+    # ----------------------- Obsidian Sync Tools ----------------------- #
+    def _obsidian_sync(self, vault_path: str = "", **_) -> ToolResult:
+        """Sync all Mythos data to Obsidian."""
+        try:
+            from .obsidian_sync import obsidian_sync
+            from .feed import feed
+            
+            if vault_path:
+                obsidian_sync.set_vault(vault_path)
+            
+            # Get feed data
+            feed_data = feed.get_feed(limit=100)
+            
+            # Perform full sync
+            results = obsidian_sync.full_sync(feed_data=feed_data)
+            
+            output = "Mythos → Obsidian Sync Complete!\n\n"
+            for key, result in results.items():
+                if result.get("success"):
+                    output += f"✓ {key}: synced\n"
+                else:
+                    output += f"✗ {key}: failed\n"
+            
+            output += f"\nVault: {obsidian_sync.vault_path}"
+            output += f"\nOpen Obsidian to view your data!"
+            
+            return ToolResult(True, output)
+        except Exception as e:
+            return ToolResult(False, "", f"Sync error: {e}")
+
+    def _obsidian_sync_feed(self, vault_path: str = "", **_) -> ToolResult:
+        """Sync Mythos feed to Obsidian."""
+        try:
+            from .obsidian_sync import obsidian_sync
+            from .feed import feed
+            
+            if vault_path:
+                obsidian_sync.set_vault(vault_path)
+            
+            feed_data = feed.get_feed(limit=100)
+            result = obsidian_sync.sync_feed(feed_data)
+            
+            if result.get("success"):
+                return ToolResult(True, f"Feed synced! {result['synced']} activities → {result['folder']}")
+            return ToolResult(False, "", "Sync failed")
+        except Exception as e:
+            return ToolResult(False, "", f"Sync error: {e}")
 
     # ----------------------- Execution ----------------------- #
     def execute(self, call: ToolCall) -> ToolResult:
