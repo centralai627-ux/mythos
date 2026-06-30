@@ -210,10 +210,11 @@ class MiMoAPI:
     def tts(
         self,
         text: str,
-        model: str = "mimo-v2.5-tts",
-        voice: str = "冰糖",
+        model: str = None,
+        voice: str = None,
         speed: float = 1.0,
         output_format: str = "wav",
+        max_retries: int = 2,
     ) -> TTSResult:
         """Convert text to speech using MiMo TTS.
         
@@ -222,77 +223,95 @@ class MiMoAPI:
         - assistant message: text to speak
         - audio field: format and voice settings
         
-        Prioritizes Indonesian and English with clear pronunciation.
+        Uses voice design model for English (Sister Location style).
         """
+        import base64
+        import time
+        import random
+        
         # Detect language (simple heuristic)
         has_indonesian = bool(re.search(r'[a-z]+ (adalah|dan|ini|itu|untuk|dengan|tidak|bisa|akan|sudah|yang|dari|ke|di|pada)', text, re.IGNORECASE))
         
-        voice = 'Mia' if not has_indonesian else '冰糖'
+        # Use voice design model for English, regular TTS for Indonesian
+        if model is None:
+            model = 'mimo-v2.5-tts' if has_indonesian else 'mimo-v2.5-tts-voicedesign'
+        
+        if voice is None:
+            voice = '冰糖' if has_indonesian else 'Mia'
+        
         style_instruction = (
             'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia. '
             'Gunakan intonasi yang tepat dan pengucapan yang benar.'
             if has_indonesian else
-            'Speak in a cold, eerie, robotic female voice like Circus Baby from Five Nights at Freddy\'s Sister Location. '
-            'Slow, unsettling, slightly mechanical tone with perfect clarity. '
-            'Think of a friendly-yet-creepy AI narrator telling a dark story with a hint of malice beneath a polite exterior.'
+            'A cold, eerie, robotic female AI voice like Circus Baby from Five Nights at Freddy\'s Sister Location. '
+            'Mechanical yet polite, unsettling calm, slightly distorted with a hint of malice beneath a friendly facade. '
+            'Slow deliberate pacing, every word precisely articulated like a sophisticated AI speaking to humans it finds... interesting.'
         )
         
         # MiMo TTS uses Chat Completions API format
+        messages = [
+            {"role": "user", "content": style_instruction},
+            {"role": "assistant", "content": text}
+        ]
+        
+        audio_config = (
+            {"format": output_format, "voice": voice}
+            if has_indonesian else
+            {"format": output_format, "optimize_text_preview": True}
+        )
+        
         data = {
             "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": style_instruction
-                },
-                {
-                    "role": "assistant",
-                    "content": text
-                }
-            ],
-            "audio": {
-                "format": output_format,
-                "voice": voice
-            }
+            "messages": messages,
+            "audio": audio_config
         }
         
         key = self._get_key()
-        headers = {
-            "Authorization": f"Bearer {key}",
-        }
-        
-        # TTS uses Chat Completions endpoint, not /audio/speech
+        headers = {"Authorization": f"Bearer {key}"}
         url = f"{self.base_url}/chat/completions"
         
-        try:
-            response = self._session.post(
-                url,
-                json=data,
-                headers=headers,
-                timeout=60,
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            
-            # Audio is in result['choices'][0]['message']['audio']['data'] as base64
-            if (result.get('choices') and 
-                result['choices'][0].get('message') and 
-                result['choices'][0]['message'].get('audio')):
-                
-                audio_base64 = result['choices'][0]['message']['audio']['data']
-                import base64
-                audio_data = base64.b64decode(audio_base64)
-                
-                return TTSResult(
-                    success=True,
-                    audio_data=audio_data,
-                    duration=len(audio_data) / 32000,  # 24kHz sample rate
+        for attempt in range(max_retries + 1):
+            try:
+                response = self._session.post(
+                    url,
+                    json=data,
+                    headers=headers,
+                    timeout=60,
                 )
-            else:
-                return TTSResult(success=False, error="No audio in response")
-        except Exception as e:
-            return TTSResult(success=False, error=str(e))
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    if (result.get('choices') and 
+                        result['choices'][0].get('message') and 
+                        result['choices'][0]['message'].get('audio')):
+                        
+                        audio_base64 = result['choices'][0]['message']['audio']['data']
+                        audio_data = base64.b64decode(audio_base64)
+                        
+                        return TTSResult(
+                            success=True,
+                            audio_data=audio_data,
+                            duration=len(audio_data) / 32000,
+                        )
+                    else:
+                        return TTSResult(success=False, error="No audio in response")
+                
+                elif response.status_code in [429, 503] and attempt < max_retries:
+                    # Rate limited or service busy - retry with exponential backoff
+                    delay = min(5 * (2 ** attempt) + random.uniform(0, 2), 20)
+                    time.sleep(delay)
+                    continue
+                else:
+                    return TTSResult(success=False, error=f"TTS API error {response.status_code}")
+                    
+            except Exception as e:
+                if attempt < max_retries:
+                    time.sleep(2)
+                    continue
+                return TTSResult(success=False, error=str(e))
+        
+        return TTSResult(success=False, error="Max retries exceeded")
     
     def tts_stream(
         self,

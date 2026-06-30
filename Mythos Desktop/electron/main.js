@@ -177,9 +177,8 @@ function cleanTextForSpeech(text) {
   return text.trim();
 }
 
-async function speakText(text, speed = 1.0, retries = 3) {
+async function speakText(text, speed = 1.0, retries = 2) {
   const key = keyManager.getNextMimoKey();
-  const model = 'mimo-v2.5-tts';
   
   // Clean text for speech
   const cleanText = cleanTextForSpeech(text);
@@ -194,29 +193,30 @@ async function speakText(text, speed = 1.0, retries = 3) {
   
   // Detect language (simple heuristic)
   const hasIndonesian = /[a-z]+ (adalah|dan|ini|itu|untuk|dengan|tidak|bisa|akan|sudah|yang|dari|ke|di|pada)/i.test(limitedText);
-  const voice = hasIndonesian ? '冰糖' : 'Mia';  // Chinese female for Indonesian, English female for English (Sister Location narrator)
+  
+  // Use voice design model for English (Sister Location style), regular TTS for Indonesian
+  const model = hasIndonesian ? 'mimo-v2.5-tts' : 'mimo-v2.5-tts-voicedesign';
+  const voice = hasIndonesian ? '冰糖' : 'Mia';
+  
   const styleInstruction = hasIndonesian 
     ? 'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia. Gunakan intonasi yang tepat dan pengucapan yang benar.'
-    : 'Speak in a cold, eerie, robotic female voice like Circus Baby from Five Nights at Freddy\'s Sister Location. Slow, unsettling, slightly mechanical tone with perfect clarity. Think of a friendly-yet-creepy AI narrator telling a dark story with a hint of malice beneath a polite exterior.';
+    : 'A cold, eerie, robotic female AI voice like Circus Baby from Five Nights at Freddy\'s Sister Location. Mechanical yet polite, unsettling calm, slightly distorted with a hint of malice beneath a friendly facade. Slow deliberate pacing, every word precisely articulated like a sophisticated AI speaking to humans it finds... interesting.';
   
   return new Promise((resolve) => {
     // MiMo TTS uses Chat Completions API format
+    const messages = [
+      { role: "user", content: styleInstruction },
+      { role: "assistant", content: limitedText }
+    ];
+    
+    const audioConfig = hasIndonesian 
+      ? { format: "wav", voice: voice }
+      : { format: "wav", optimize_text_preview: true };
+    
     const body = JSON.stringify({
       model: model,
-      messages: [
-        {
-          role: "user",
-          content: styleInstruction
-        },
-        {
-          role: "assistant",
-          content: limitedText
-        }
-      ],
-      audio: {
-        format: "wav",
-        voice: voice
-      }
+      messages: messages,
+      audio: audioConfig
     });
     
     const req = https.request({
@@ -235,7 +235,6 @@ async function speakText(text, speed = 1.0, retries = 3) {
         if (res.statusCode === 200) {
           try {
             const response = JSON.parse(Buffer.concat(chunks).toString());
-            // Audio is in response.choices[0].message.audio.data as base64
             if (response.choices && response.choices[0] && response.choices[0].message && response.choices[0].message.audio) {
               const audioBase64 = response.choices[0].message.audio.data;
               const audioBuffer = Buffer.from(audioBase64, 'base64');
@@ -249,8 +248,11 @@ async function speakText(text, speed = 1.0, retries = 3) {
             resolve({ success: false, error: 'Failed to parse response: ' + e.message });
           }
         } else if ((res.statusCode === 429 || res.statusCode === 503) && retries > 0) {
-          // Rate limited or service busy - retry after delay
-          const delay = Math.min(2000 * (4 - retries), 6000);
+          // Rate limited or service busy - retry with exponential backoff + jitter
+          const baseDelay = 5000 * Math.pow(2, 2 - retries);
+          const jitter = Math.random() * 2000;
+          const delay = Math.min(baseDelay + jitter, 20000);
+          console.log(`TTS retry ${3 - retries}/2 after ${Math.round(delay/1000)}s (status: ${res.statusCode})`);
           setTimeout(async () => {
             const result = await speakText(text, speed, retries - 1);
             resolve(result);
