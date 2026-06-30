@@ -194,10 +194,10 @@ async function speakText(text, speed = 1.0, retries = 3) {
   
   // Detect language (simple heuristic)
   const hasIndonesian = /[a-z]+ (adalah|dan|ini|itu|untuk|dengan|tidak|bisa|akan|sudah|yang|dari|ke|di|pada)/i.test(limitedText);
-  const voice = hasIndonesian ? '冰糖' : 'Dean';  // Chinese female for Indonesian, English male for English (deep narrator voice)
+  const voice = hasIndonesian ? '冰糖' : 'Mia';  // Chinese female for Indonesian, English female for English (Sister Location narrator)
   const styleInstruction = hasIndonesian 
     ? 'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia. Gunakan intonasi yang tepat dan pengucapan yang benar.'
-    : 'Speak in a deep, ominous, robotic narrator voice like from Five Nights at Freddy\'s Sister Location. Slow, deliberate, slightly menacing tone with perfect clarity. Think of a cold AI narrator telling a dark story.';
+    : 'Speak in a cold, eerie, robotic female voice like Circus Baby from Five Nights at Freddy\'s Sister Location. Slow, unsettling, slightly mechanical tone with perfect clarity. Think of a friendly-yet-creepy AI narrator telling a dark story with a hint of malice beneath a polite exterior.';
   
   return new Promise((resolve) => {
     // MiMo TTS uses Chat Completions API format
