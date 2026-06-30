@@ -194,31 +194,70 @@ async function speakText(text, speed = 1.0, retries = 2) {
   // Detect language (simple heuristic)
   const hasIndonesian = /[a-z]+ (adalah|dan|ini|itu|untuk|dengan|tidak|bisa|akan|sudah|yang|dari|ke|di|pada)/i.test(limitedText);
   
-  // Use voice design model for English (Sister Location style), regular TTS for Indonesian
-  const model = hasIndonesian ? 'mimo-v2.5-tts' : 'mimo-v2.5-tts-voicedesign';
+  // Try voice design first, fallback to regular TTS
+  const models = hasIndonesian 
+    ? ['mimo-v2.5-tts']
+    : ['mimo-v2.5-tts-voicedesign', 'mimo-v2.5-tts'];
+  
+  for (const model of models) {
+    const result = await speakWithModel(text, model, hasIndonesian, speed, retries);
+    if (result.success) return result;
+    if (result.error && !result.error.includes('busy') && !result.error.includes('429') && !result.error.includes('503')) {
+      return result; // Non-retryable error
+    }
+  }
+  
+  return { success: false, error: 'All TTS attempts failed - service busy' };
+}
+
+async function speakWithModel(text, model, hasIndonesian, speed, retries) {
+  const key = keyManager.getNextMimoKey();
   const voice = hasIndonesian ? '冰糖' : 'Mia';
   
   const styleInstruction = hasIndonesian 
-    ? 'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia. Gunakan intonasi yang tepat dan pengucapan yang benar.'
-    : 'A cold, eerie, robotic female AI voice like Circus Baby from Five Nights at Freddy\'s Sister Location. Mechanical yet polite, unsettling calm, slightly distorted with a hint of malice beneath a friendly facade. Slow deliberate pacing, every word precisely articulated like a sophisticated AI speaking to humans it finds... interesting.';
+    ? 'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia.'
+    : 'A cold, eerie, robotic female AI voice like Circus Baby from FNAF Sister Location. Mechanical yet polite, unsettling calm, slightly distorted with a hint of malice beneath a friendly facade.';
   
-  return new Promise((resolve) => {
-    // MiMo TTS uses Chat Completions API format
-    const messages = [
-      { role: "user", content: styleInstruction },
-      { role: "assistant", content: limitedText }
-    ];
-    
-    const audioConfig = hasIndonesian 
-      ? { format: "wav", voice: voice }
-      : { format: "wav", optimize_text_preview: true };
-    
+  const audioConfig = hasIndonesian 
+    ? { format: "wav", voice: voice }
+    : { format: "wav", optimize_text_preview: true };
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
     const body = JSON.stringify({
       model: model,
-      messages: messages,
+      messages: [
+        { role: "user", content: styleInstruction },
+        { role: "assistant", content: text }
+      ],
       audio: audioConfig
     });
     
+    try {
+      const result = await makeTTSRequest(key, body);
+      if (result.success) return result;
+      
+      if ((result.statusCode === 429 || result.statusCode === 503) && attempt < retries) {
+        const delay = Math.min(5000 * Math.pow(2, attempt) + Math.random() * 2000, 20000);
+        console.log(`TTS retry ${attempt + 1}/${retries} after ${Math.round(delay/1000)}s (model: ${model})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      
+      return result;
+    } catch (e) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      return { success: false, error: e.message };
+    }
+  }
+  
+  return { success: false, error: 'Max retries exceeded' };
+}
+
+function makeTTSRequest(key, body) {
+  return new Promise((resolve) => {
     const req = https.request({
       hostname: 'api.xiaomimimo.com',
       port: 443,
@@ -247,19 +286,13 @@ async function speakText(text, speed = 1.0, retries = 2) {
           } catch (e) {
             resolve({ success: false, error: 'Failed to parse response: ' + e.message });
           }
-        } else if ((res.statusCode === 429 || res.statusCode === 503) && retries > 0) {
-          // Rate limited or service busy - retry with exponential backoff + jitter
-          const baseDelay = 5000 * Math.pow(2, 2 - retries);
-          const jitter = Math.random() * 2000;
-          const delay = Math.min(baseDelay + jitter, 20000);
-          console.log(`TTS retry ${3 - retries}/2 after ${Math.round(delay/1000)}s (status: ${res.statusCode})`);
-          setTimeout(async () => {
-            const result = await speakText(text, speed, retries - 1);
-            resolve(result);
-          }, delay);
         } else {
           const errorBody = Buffer.concat(chunks).toString();
-          resolve({ success: false, error: `TTS API error ${res.statusCode}: ${errorBody.substring(0, 200)}` });
+          resolve({ 
+            success: false, 
+            error: `TTS API error ${res.statusCode}`,
+            statusCode: res.statusCode
+          });
         }
       });
     });
