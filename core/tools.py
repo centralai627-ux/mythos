@@ -366,6 +366,12 @@ class ToolRegistry:
                 "params": {},
                 "run": self._smart_stats,
             },
+            # Voice/TTS
+            "voice_speak": {
+                "desc": "Convert text to speech using MiMo TTS voice model.",
+                "params": {"text": "string (text to speak)", "voice": "string (optional, voice name)", "speed": "float (optional, 0.5-2.0, default 1.0)"},
+                "run": self._voice_speak,
+            },
         }
 
     @property
@@ -1618,6 +1624,39 @@ class ToolRegistry:
             return ToolResult(True, result)
         except Exception as e:
             return ToolResult(False, "", f"Smart AI error: {e}")
+
+    # ----------------------- Voice/TTS Tools ----------------------- #
+    def _voice_speak(self, text: str = "", voice: str = "default", speed: float = 1.0, **_) -> ToolResult:
+        """Convert text to speech using MiMo TTS."""
+        try:
+            from .mimo_api import mimo_api
+            
+            if not text:
+                return ToolResult(False, "", "Text is required for speech")
+            
+            # Validate speed
+            if speed < 0.5 or speed > 2.0:
+                speed = 1.0
+            
+            # Call MiMo TTS API
+            result = mimo_api.tts(
+                text=text,
+                voice=voice,
+                speed=speed,
+            )
+            
+            if result.success:
+                # Save audio to temp file
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    f.write(result.audio_data)
+                    audio_path = f.name
+                
+                return ToolResult(True, f"Speech generated: {audio_path}\nDuration: {result.duration:.1f}s")
+            else:
+                return ToolResult(False, "", f"TTS failed: {result.error}")
+        except Exception as e:
+            return ToolResult(False, "", f"Voice error: {e}")
 
     # ----------------------- Execution ----------------------- #
     def execute(self, call: ToolCall) -> ToolResult:

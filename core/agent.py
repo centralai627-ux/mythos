@@ -415,13 +415,19 @@ class MythosAgent:
             "5-pro": "mythos-5-pro",
             "pro": "mythos-5-pro",
             "mythos-5-pro": "mythos-5-pro",
+            # MiMo models
+            "mimo": "mythos-mimo-pro",
+            "mimo-pro": "mythos-mimo-pro",
+            "mimo-omni": "mythos-mimo-omni",
+            "mimo-flash": "mythos-mimo-flash",
+            "mimo-tts": "mythos-mimo-tts",
         }
         target = mapping.get(alias, alias)
         if self.brain.set_model(target):
             self.ui.success(f"Active model: {target}")
         else:
             self.ui.error(
-                "Unknown model. Options: code, code-alt, code-super, ultra, vision, 5 (Mythos-5), 5-pro"
+                "Unknown model. Options: code, code-alt, code-super, ultra, vision, 5 (Mythos-5), 5-pro, mimo-pro, mimo-omni, mimo-flash, mimo-tts"
             )
 
     def _show_history(self) -> None:

@@ -23,10 +23,18 @@ MODEL_ALIASES: Dict[str, str] = {
     "mythos-vision": "vision",  # Image / file analysis.
     "mythos-5": "shannon-1", # Shannon Coder 1 (primary) - branded Mythos 5.
     "mythos-5-pro": "shannon-2",  # Shannon Pro 2 (secondary) - branded Mythos 5 Pro.
+    # MiMo models
+    "mythos-mimo-pro": "mimo-pro",  # MiMo V2 Pro
+    "mythos-mimo-omni": "mimo-omni",  # MiMo V2 Omni (multimodal)
+    "mythos-mimo-flash": "mimo-flash",  # MiMo V2 Flash (fast)
+    "mythos-mimo-tts": "mimo-tts",  # MiMo TTS (voice)
 }
 
 # Aliases routed to the Shannon provider (separate base URL + key ring).
 SHANNON_ALIASES = {"mythos-5", "mythos-5-pro"}
+
+# Aliases routed to the MiMo provider (separate base URL + key ring).
+MIMO_ALIASES = {"mythos-mimo-pro", "mythos-mimo-omni", "mythos-mimo-flash", "mythos-mimo-tts"}
 
 
 class APIError(Exception):
@@ -56,6 +64,9 @@ class MythosAPI:
         )
         self.base_url = self.cfg.base_url.rstrip("/")
         self.shannon_base_url = self.cfg.shannon_base_url.rstrip("/")
+        # MiMo API configuration
+        self.mimo_base_url = "https://api.xiaomimimo.com/v1"
+        self.mimo_keys = self.cfg.mimo_keys if hasattr(self.cfg, 'mimo_keys') else []
         self.timeout = self.cfg.timeout
         self._session = requests.Session()
         self._session.headers.update({
@@ -68,12 +79,18 @@ class MythosAPI:
     # ----------------------- Helpers ----------------------- #
     def _is_shannon(self, alias: str) -> bool:
         return alias in SHANNON_ALIASES
+    
+    def _is_mimo(self, alias: str) -> bool:
+        return alias in MIMO_ALIASES
 
     def _resolve_model(self, alias: str) -> str:
         """Translate user-facing alias to internal model id."""
         if self._is_shannon(alias):
             internal = MODEL_ALIASES.get(alias, "shannon-1")
             return self.cfg.get_shannon_model(internal)
+        if self._is_mimo(alias):
+            internal = MODEL_ALIASES.get(alias, "mimo-v2-pro")
+            return self.cfg.get_mimo_model(internal) if hasattr(self.cfg, 'get_mimo_model') else internal
         internal = MODEL_ALIASES.get(alias, alias)
         return self.cfg.get_model(internal)
 

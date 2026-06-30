@@ -93,6 +93,31 @@ class MythosConfig:
         return models.get(alias, models.get("shannon-1", "shannon-coder-1"))
 
     @property
+    def mimo(self) -> Dict[str, Any]:
+        """Get MiMo configuration."""
+        return self._data.get("mimo", {})
+    
+    @property
+    def mimo_keys(self) -> list:
+        """Get MiMo API keys."""
+        return list(self.mimo.get("keys", []))
+    
+    @property
+    def mimo_base_url(self) -> str:
+        """Get MiMo API base URL."""
+        return self.mimo.get("base_url", "https://api.xiaomimimo.com/v1")
+    
+    def get_mimo_model(self, alias: str) -> str:
+        """Resolve internal MiMo model alias."""
+        models = self.mimo.get("models", {})
+        return models.get(alias, models.get("mimo-v2-pro", "mimo-v2-pro"))
+    
+    @property
+    def mimo_tts_config(self) -> Dict[str, Any]:
+        """Get MiMo TTS configuration."""
+        return self.mimo.get("tts", {})
+
+    @property
     def max_tokens(self) -> int:
         return int(self.optimization.get("max_tokens", 2048))
 

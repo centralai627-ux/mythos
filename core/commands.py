@@ -368,6 +368,10 @@ class CommandRegistry:
             "vision": "Mythos Vision (multimodal)",
             "5": "Mythos-5 (Shannon)",
             "5-pro": "Mythos-5 Pro",
+            "mimo-pro": "MiMo V2 Pro (Xiaomi)",
+            "mimo-omni": "MiMo V2 Omni (multimodal)",
+            "mimo-flash": "MiMo V2 Flash (fast)",
+            "mimo-tts": "MiMo TTS (voice)",
         }
         self.agent.ui.model_list(models, self.agent.brain.current_model)
 
