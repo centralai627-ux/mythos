@@ -211,7 +211,7 @@ class MiMoAPI:
         self,
         text: str,
         model: str = "mimo-v2.5-tts",
-        voice: str = "mimo_default",
+        voice: str = "冰糖",
         speed: float = 1.0,
         output_format: str = "wav",
     ) -> TTSResult:
@@ -221,14 +221,28 @@ class MiMoAPI:
         - user message: style/tone instructions
         - assistant message: text to speak
         - audio field: format and voice settings
+        
+        Prioritizes Indonesian and English with clear pronunciation.
         """
+        # Detect language (simple heuristic)
+        has_indonesian = bool(re.search(r'[a-z]+ (adalah|dan|ini|itu|untuk|dengan|tidak|bisa|akan|sudah|yang|dari|ke|di|pada)', text, re.IGNORECASE))
+        
+        voice = '冰糖' if has_indonesian else 'Chloe'
+        style_instruction = (
+            'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia. '
+            'Gunakan intonasi yang tepat dan pengucapan yang benar.'
+            if has_indonesian else
+            'Speak clearly, naturally, and professionally in English. '
+            'Use proper intonation and pronunciation.'
+        )
+        
         # MiMo TTS uses Chat Completions API format
         data = {
             "model": model,
             "messages": [
                 {
                     "role": "user",
-                    "content": "Speak naturally and clearly"
+                    "content": style_instruction
                 },
                 {
                     "role": "assistant",

@@ -183,9 +183,84 @@ async function speakText(text, speed = 1.0) {
   
   // Clean text for speech
   const cleanText = cleanTextForSpeech(text);
-  if (!cleanText || cleanText.length < 10) {
+  if (!cleanText || cleanText.length < 5) {
     return { success: false, error: 'Text too short to speak' };
   }
+  
+  // Limit speech length
+  const limitedText = cleanText.length > 800 
+    ? cleanText.substring(0, 800) + '... I have truncated the rest.'
+    : cleanText;
+  
+  // Detect language (simple heuristic)
+  const hasIndonesian = /[a-z]+ (adalah|dan|ini|itu|untuk|dengan|tidak|bisa|akan|sudah|yang|dari|ke|di|pada)/i.test(limitedText);
+  const voice = hasIndonesian ? '冰糖' : 'Chloe';  // Chinese female for Indonesian, English female for English
+  const styleInstruction = hasIndonesian 
+    ? 'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia. Gunakan intonasi yang tepat dan pengucapan yang benar.'
+    : 'Speak clearly, naturally, and professionally in English. Use proper intonation and pronunciation.';
+  
+  return new Promise((resolve) => {
+    // MiMo TTS uses Chat Completions API format
+    const body = JSON.stringify({
+      model: model,
+      messages: [
+        {
+          role: "user",
+          content: styleInstruction
+        },
+        {
+          role: "assistant",
+          content: limitedText
+        }
+      ],
+      audio: {
+        format: "wav",
+        voice: voice
+      }
+    });
+    
+    const req = https.request({
+      hostname: 'api.xiaomimimo.com',
+      port: 443,
+      path: '/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key,
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          try {
+            const response = JSON.parse(Buffer.concat(chunks).toString());
+            // Audio is in response.choices[0].message.audio.data as base64
+            if (response.choices && response.choices[0] && response.choices[0].message && response.choices[0].message.audio) {
+              const audioBase64 = response.choices[0].message.audio.data;
+              const audioBuffer = Buffer.from(audioBase64, 'base64');
+              const tempPath = path.join(os.tmpdir(), `mythos_tts_${Date.now()}.wav`);
+              fs.writeFileSync(tempPath, audioBuffer);
+              resolve({ success: true, audioPath: tempPath, duration: audioBuffer.length / 32000 });
+            } else {
+              resolve({ success: false, error: 'No audio in response' });
+            }
+          } catch (e) {
+            resolve({ success: false, error: 'Failed to parse response: ' + e.message });
+          }
+        } else {
+          const errorBody = Buffer.concat(chunks).toString();
+          resolve({ success: false, error: `TTS API error ${res.statusCode}: ${errorBody.substring(0, 200)}` });
+        }
+      });
+    });
+    
+    req.on('error', (e) => resolve({ success: false, error: e.message }));
+    req.setTimeout(60000, () => { req.destroy(); resolve({ success: false, error: 'timeout' }); });
+    req.write(body);
+    req.end();
+  });
+}
   
   // Limit speech length
   const limitedText = cleanText.length > 500 
