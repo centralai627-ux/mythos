@@ -1,230 +1,176 @@
-const initSqlJs = require('sql.js');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
 const DB_DIR = path.join(os.homedir(), '.mythos');
-const DB_PATH = path.join(DB_DIR, 'memory.db');
+const DB_PATH = path.join(DB_DIR, 'memory.json');
 
 // Ensure directory exists
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
 }
 
-let db;
-let SQL;
-
-async function getDB() {
-  if (!db) {
-    SQL = await initSqlJs();
-    
-    // Load existing database or create new
-    if (fs.existsSync(DB_PATH)) {
-      const buffer = fs.readFileSync(DB_PATH);
-      db = new SQL.Database(buffer);
-    } else {
-      db = new SQL.Database();
+// Load or initialize database
+function loadDB() {
+  if (fs.existsSync(DB_PATH)) {
+    try {
+      return JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+    } catch (e) {
+      console.error('Failed to load memory database:', e);
     }
-    
-    initTables();
   }
-  return db;
+  return {
+    conversations: [],
+    messages: [],
+    preferences: [],
+    facts: []
+  };
 }
 
-function saveDB() {
-  if (db) {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(DB_PATH, buffer);
+function saveDB(db) {
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  } catch (e) {
+    console.error('Failed to save memory database:', e);
   }
 }
 
-function initTables() {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS conversations (
-      id TEXT PRIMARY KEY,
-      title TEXT,
-      model TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      conversation_id TEXT,
-      role TEXT,
-      content TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS preferences (
-      key TEXT PRIMARY KEY,
-      value TEXT,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS facts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      content TEXT,
-      source TEXT,
-      confidence REAL DEFAULT 1.0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-  saveDB();
-}
+let db = loadDB();
 
 // --- Conversation Management ---
-async function createConversation(title = 'New Chat', model = 'mythos-auto') {
-  const database = await getDB();
+function createConversation(title = 'New Chat', model = 'mythos-auto') {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  database.run('INSERT INTO conversations (id, title, model) VALUES (?, ?, ?)', [id, title, model]);
-  saveDB();
+  const conv = {
+    id,
+    title,
+    model,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  db.conversations.push(conv);
+  saveDB(db);
   return id;
 }
 
-async function updateConversation(id, updates) {
-  const database = await getDB();
-  const sets = [];
-  const values = [];
-  for (const [key, value] of Object.entries(updates)) {
-    sets.push(`${key} = ?`);
-    values.push(value);
+function updateConversation(id, updates) {
+  const conv = db.conversations.find(c => c.id === id);
+  if (conv) {
+    Object.assign(conv, updates, { updated_at: new Date().toISOString() });
+    saveDB(db);
   }
-  sets.push('updated_at = CURRENT_TIMESTAMP');
-  values.push(id);
-  database.run(`UPDATE conversations SET ${sets.join(', ')} WHERE id = ?`, values);
-  saveDB();
 }
 
-async function getConversations(limit = 50) {
-  const database = await getDB();
-  const results = database.exec('SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ?', [limit]);
-  return results.length > 0 ? results[0].values.map(row => {
-    const obj = {};
-    results[0].columns.forEach((col, i) => obj[col] = row[i]);
-    return obj;
-  }) : [];
+function getConversations(limit = 50) {
+  return db.conversations
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .slice(0, limit);
 }
 
-async function getConversation(id) {
-  const database = await getDB();
-  const results = database.exec('SELECT * FROM conversations WHERE id = ?', [id]);
-  if (results.length > 0 && results[0].values.length > 0) {
-    const obj = {};
-    results[0].columns.forEach((col, i) => obj[col] = results[0].values[0][i]);
-    return obj;
-  }
-  return null;
+function getConversation(id) {
+  return db.conversations.find(c => c.id === id) || null;
 }
 
-async function deleteConversation(id) {
-  const database = await getDB();
-  database.run('DELETE FROM messages WHERE conversation_id = ?', [id]);
-  database.run('DELETE FROM conversations WHERE id = ?', [id]);
-  saveDB();
+function deleteConversation(id) {
+  db.messages = db.messages.filter(m => m.conversation_id !== id);
+  db.conversations = db.conversations.filter(c => c.id !== id);
+  saveDB(db);
 }
 
 // --- Message Management ---
-async function addMessage(conversationId, role, content) {
-  const database = await getDB();
-  database.run('INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)', [conversationId, role, content]);
-  database.run('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [conversationId]);
-  saveDB();
-}
-
-async function getMessages(conversationId, limit = 50) {
-  const database = await getDB();
-  const results = database.exec('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?', [conversationId, limit]);
-  if (results.length > 0) {
-    return results[0].values.map(row => {
-      const obj = {};
-      results[0].columns.forEach((col, i) => obj[col] = row[i]);
-      return obj;
-    }).reverse();
+function addMessage(conversationId, role, content) {
+  const msg = {
+    id: Date.now(),
+    conversation_id: conversationId,
+    role,
+    content,
+    created_at: new Date().toISOString()
+  };
+  db.messages.push(msg);
+  
+  const conv = db.conversations.find(c => c.id === conversationId);
+  if (conv) {
+    conv.updated_at = new Date().toISOString();
   }
-  return [];
+  saveDB(db);
 }
 
-async function searchMessages(query, limit = 20) {
-  const database = await getDB();
-  const results = database.exec(
-    'SELECT m.*, c.title as conversation_title FROM messages m JOIN conversations c ON m.conversation_id = c.id WHERE m.content LIKE ? ORDER BY m.created_at DESC LIMIT ?',
-    [`%${query}%`, limit]
-  );
-  if (results.length > 0) {
-    return results[0].values.map(row => {
-      const obj = {};
-      results[0].columns.forEach((col, i) => obj[col] = row[i]);
-      return obj;
+function getMessages(conversationId, limit = 50) {
+  return db.messages
+    .filter(m => m.conversation_id === conversationId)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    .slice(-limit);
+}
+
+function searchMessages(query, limit = 20) {
+  const lowerQuery = query.toLowerCase();
+  return db.messages
+    .filter(m => m.content.toLowerCase().includes(lowerQuery))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, limit)
+    .map(m => {
+      const conv = db.conversations.find(c => c.id === m.conversation_id);
+      return { ...m, conversation_title: conv ? conv.title : 'Unknown' };
     });
-  }
-  return [];
 }
 
 // --- Preferences ---
-async function setPreference(key, value) {
-  const database = await getDB();
-  database.run('INSERT OR REPLACE INTO preferences (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [key, value]);
-  saveDB();
-}
-
-async function getPreference(key, defaultValue = null) {
-  const database = await getDB();
-  const results = database.exec('SELECT value FROM preferences WHERE key = ?', [key]);
-  if (results.length > 0 && results[0].values.length > 0) {
-    return results[0].values[0][0];
-  }
-  return defaultValue;
-}
-
-async function getAllPreferences() {
-  const database = await getDB();
-  const results = database.exec('SELECT * FROM preferences');
-  if (results.length > 0) {
-    return results[0].values.map(row => {
-      const obj = {};
-      results[0].columns.forEach((col, i) => obj[col] = row[i]);
-      return obj;
+function setPreference(key, value) {
+  const pref = db.preferences.find(p => p.key === key);
+  if (pref) {
+    pref.value = value;
+    pref.updated_at = new Date().toISOString();
+  } else {
+    db.preferences.push({
+      key,
+      value,
+      updated_at: new Date().toISOString()
     });
   }
-  return [];
+  saveDB(db);
+}
+
+function getPreference(key, defaultValue = null) {
+  const pref = db.preferences.find(p => p.key === key);
+  return pref ? pref.value : defaultValue;
+}
+
+function getAllPreferences() {
+  return db.preferences;
 }
 
 // --- Facts ---
-async function addFact(content, source = 'user') {
-  const database = await getDB();
-  database.run('INSERT INTO facts (content, source) VALUES (?, ?)', [content, source]);
-  saveDB();
+function addFact(content, source = 'user') {
+  db.facts.push({
+    id: Date.now(),
+    content,
+    source,
+    confidence: 1.0,
+    created_at: new Date().toISOString()
+  });
+  saveDB(db);
 }
 
-async function searchFacts(query, limit = 10) {
-  const database = await getDB();
-  const results = database.exec('SELECT * FROM facts WHERE content LIKE ? ORDER BY confidence DESC LIMIT ?', [`%${query}%`, limit]);
-  if (results.length > 0) {
-    return results[0].values.map(row => {
-      const obj = {};
-      results[0].columns.forEach((col, i) => obj[col] = row[i]);
-      return obj;
-    });
-  }
-  return [];
+function searchFacts(query, limit = 10) {
+  const lowerQuery = query.toLowerCase();
+  return db.facts
+    .filter(f => f.content.toLowerCase().includes(lowerQuery))
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, limit);
 }
 
-async function getFactsContext(query) {
-  const facts = await searchFacts(query, 5);
+function getFactsContext(query) {
+  const facts = searchFacts(query, 5);
   if (facts.length === 0) return '';
   return facts.map(f => f.content).join('\n');
 }
 
 // --- Context Building ---
-async function buildContext(conversationId, userMessage) {
-  const messages = await getMessages(conversationId, 20);
-  const facts = await searchFacts(userMessage, 3);
+function buildContext(conversationId, userMessage) {
+  const messages = getMessages(conversationId, 20);
+  const facts = searchFacts(userMessage, 3);
   const factsContext = facts.length > 0 ? '\n\nKnown facts:\n' + facts.map(f => `- ${f.content}`).join('\n') : '';
-  const model = await getPreference('preferred_model', 'mythos-auto');
-  const language = await getPreference('preferred_language', 'id');
+  const model = getPreference('preferred_model', 'mythos-auto');
+  const language = getPreference('preferred_language', 'id');
 
   return {
     messages,
@@ -235,65 +181,60 @@ async function buildContext(conversationId, userMessage) {
 }
 
 // --- Settings Persistence ---
-async function saveSettings(settings) {
+function saveSettings(settings) {
   for (const [key, value] of Object.entries(settings)) {
-    await setPreference(`setting_${key}`, JSON.stringify(value));
+    setPreference(`setting_${key}`, JSON.stringify(value));
   }
 }
 
-async function loadSettings() {
+function loadSettings() {
   const settings = {};
-  const database = await getDB();
-  const results = database.exec("SELECT key, value FROM preferences WHERE key LIKE 'setting_%'");
-  if (results.length > 0) {
-    for (const row of results[0].values) {
-      const key = row[0].replace('setting_', '');
-      try {
-        settings[key] = JSON.parse(row[1]);
-      } catch {
-        settings[key] = row[1];
-      }
+  const rows = db.preferences.filter(p => p.key.startsWith('setting_'));
+  for (const row of rows) {
+    const key = row.key.replace('setting_', '');
+    try {
+      settings[key] = JSON.parse(row.value);
+    } catch {
+      settings[key] = row.value;
     }
   }
   return settings;
 }
 
 // --- Export/Import ---
-async function exportConversations(filePath) {
-  const conversations = await getConversations(1000);
-  const data = [];
-  for (const conv of conversations) {
-    data.push({
-      ...conv,
-      messages: await getMessages(conv.id, 1000)
-    });
-  }
+function exportConversations(filePath) {
+  const conversations = getConversations(1000);
+  const data = conversations.map(c => ({
+    ...c,
+    messages: getMessages(c.id, 1000)
+  }));
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
   return { success: true, count: data.length };
 }
 
-async function importConversations(filePath) {
+function importConversations(filePath) {
   const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  const database = await getDB();
   let count = 0;
   for (const conv of data) {
-    database.run('INSERT OR REPLACE INTO conversations (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [conv.id, conv.title, conv.model, conv.created_at, conv.updated_at]);
+    const existing = db.conversations.find(c => c.id === conv.id);
+    if (!existing) {
+      db.conversations.push(conv);
+    }
     for (const msg of conv.messages || []) {
-      database.run('INSERT OR IGNORE INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)', [msg.id, msg.conversation_id, msg.role, msg.content, msg.created_at]);
+      const existingMsg = db.messages.find(m => m.id === msg.id);
+      if (!existingMsg) {
+        db.messages.push(msg);
+      }
     }
     count++;
   }
-  saveDB();
+  saveDB(db);
   return { success: true, count };
 }
 
 // --- Cleanup ---
 function close() {
-  if (db) {
-    saveDB();
-    db.close();
-    db = null;
-  }
+  saveDB(db);
 }
 
 process.on('exit', close);
