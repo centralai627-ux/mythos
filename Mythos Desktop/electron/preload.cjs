@@ -56,5 +56,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     searchFacts: (query, limit) => ipcRenderer.invoke('memory:searchFacts', query, limit),
     exportConversations: (filePath) => ipcRenderer.invoke('memory:exportConversations', filePath),
     importConversations: (filePath) => ipcRenderer.invoke('memory:importConversations', filePath),
-  }
+  },
+  
+  // Audio playback
+  onPlayAudio: (callback) => ipcRenderer.on('play-audio', (_e, audioPath) => callback(audioPath)),
 });

@@ -40,6 +40,23 @@ export default function ChatSection() {
     }
   }, [msgs, loading]);
 
+  // Listen for boot introduction audio
+  useEffect(() => {
+    if (window.electronAPI?.onPlayAudio) {
+      window.electronAPI.onPlayAudio((audioPath: string) => {
+        const audioData = window.electronAPI.invoke('voice:getAudioData', audioPath);
+        audioData.then((data: any) => {
+          if (data.success) {
+            const audio = new Audio(data.dataUrl);
+            setAudioPlaying(audio);
+            audio.play().catch(e => console.error('Boot audio play error:', e));
+            audio.onended = () => setAudioPlaying(null);
+          }
+        });
+      });
+    }
+  }, []);
+
   const newConv = () => {
     const id = Date.now();
     setConvs((p) => [{ id, title: "New Session", messages: [] }, ...p]);

@@ -86,7 +86,11 @@ async function createWindow() {
     },
     show: false,
   });
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    // Play Mythos introduction speech on first launch
+    playBootIntroduction();
+  });
   mainWindow.loadURL('http://127.0.0.1:' + port);
   mainWindow.on('closed', () => { mainWindow = null; if (server) server.close(); });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
@@ -158,6 +162,38 @@ ipcMain.handle('memory:searchFacts', async (_e, query, limit) => memory.searchFa
 ipcMain.handle('memory:exportConversations', async (_e, filePath) => memory.exportConversations(filePath));
 ipcMain.handle('memory:importConversations', async (_e, filePath) => memory.importConversations(filePath));
 
+// --- Boot Introduction ---
+const MYTHOS_INTRODUCTION = `Hello. I am Mythos. Your autonomous AI assistant.
+
+I was designed to help you think, create, and build. I can write code, analyze documents, search the web, process images, and speak with you directly.
+
+I am always learning. Every conversation we have helps me understand you better. I remember what matters to you, and I use that knowledge to provide more relevant, more helpful responses over time.
+
+I can generate PDFs, create spreadsheets, manage your notes, and even synchronize with Obsidian as your second brain. My voice is powered by advanced text-to-speech technology, and I can adapt my tone and style to match your preferences.
+
+Think of me as your digital companion. I am here to assist, to explore ideas with you, and to make your workflow smoother. Whether you need help with a complex coding problem, want to brainstorm creative solutions, or simply need someone to talk through an idea with — I am ready.
+
+Let us begin.`;
+
+async function playBootIntroduction() {
+  try {
+    // Wait a moment for the app to fully load
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Play the introduction
+    const result = await speakText(MYTHOS_INTRODUCTION);
+    
+    if (result.success && result.audioPath) {
+      // Notify frontend to play audio
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('play-audio', result.audioPath);
+      }
+    }
+  } catch (e) {
+    console.error('Boot introduction failed:', e);
+  }
+}
+
 // --- Voice/TTS Functions ---
 function cleanTextForSpeech(text) {
   // Remove code blocks
@@ -228,9 +264,15 @@ async function speakWithModel(text, model, hasIndonesian, speed, retries) {
   const key = keyManager.getNextMimoKey();
   const voice = hasIndonesian ? '冰糖' : 'Mia';
   
+  // Sister Location style - cold, polite, eerie female AI voice
   const styleInstruction = hasIndonesian 
     ? 'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia.'
-    : 'A cold, eerie, robotic female AI voice like Circus Baby from FNAF Sister Location. Mechanical yet polite, unsettling calm, slightly distorted with a hint of malice beneath a friendly facade.';
+    : `(Circus Baby voice) A young female AI voice, cold and mechanical yet deceptively polite. 
+The voice should sound like a sophisticated animatronic trying to be friendly while hiding darker intentions. 
+Slightly distorted, with perfect clarity and an unsettling calmness. 
+Think of a robot that has learned to mimic human warmth but can't quite hide the artificial nature beneath.
+Slow, deliberate pacing with precise articulation. Each word carefully chosen and delivered.
+A hint of curiosity and playfulness that feels slightly wrong - like something pretending to be human.`;
   
   const audioConfig = hasIndonesian 
     ? { format: "wav", voice: voice }
