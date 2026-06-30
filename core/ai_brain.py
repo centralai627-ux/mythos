@@ -412,19 +412,28 @@ class MythosBrain:
         self.history: List[Dict[str, str]] = []
         self.current_model: str = "mythos-code"
         self.current_model_alt: Optional[str] = "mythos-code-alt"  # Fallback model
-        self.max_history = 20
-        self.max_tool_steps = 10             # safety cap on the loop
+        self.max_history = 50              # Increased from 20 - remember more context
+        self.max_tool_steps = 15           # Increased from 10 - more complex tasks
         self.last_tool_results: List[ToolResult] = []
         self.conversation_id: Optional[str] = None
+        self.facts_context: str = ""       # Loaded facts from memory
 
     def set_conversation(self, conv_id: str):
         """Set current conversation ID for memory persistence."""
         self.conversation_id = conv_id
         # Load history from memory
         if conv_id:
-            from .memory import get_messages
+            from .memory import get_messages, get_facts_context
             saved = get_messages(conv_id, self.max_history)
             self.history = [{"role": m["role"], "content": m["content"]} for m in saved]
+            
+            # Load relevant facts from memory
+            try:
+                facts = get_facts_context("")
+                if facts:
+                    self.facts_context = facts
+            except Exception:
+                pass
 
     def save_to_memory(self, role: str, content: str):
         """Save message to persistent memory."""
@@ -432,14 +441,39 @@ class MythosBrain:
             from .memory import add_message
             add_message(self.conversation_id, role, content)
 
+    def get_context_summary(self) -> str:
+        """Get summary of current context for AI."""
+        summary = []
+        
+        # Recent conversation history
+        if self.history:
+            summary.append(f"Recent conversation: {len(self.history)} messages")
+        
+        # Facts from memory
+        if self.facts_context:
+            summary.append(f"Known facts: {len(self.facts_context.split(chr(10)))} items")
+        
+        # Current model
+        summary.append(f"Current model: {self.current_model}")
+        
+        return " | ".join(summary) if summary else "No context loaded"
+
     # ----------------------- Tool schema injection ----------------------- #
     def _system_prompt(self, alias: str) -> str:
         """Return system prompt, injecting the live tool schema if present."""
         base = SYS_PROMPTS.get(alias, SYS_PROMPTS["mythos-code"])
         if "{tool_schema}" in base and self.tools:
-            return base.replace("{tool_schema}", self.tools.schema_for_prompt())
-        # Fallback: remove placeholder if no tools wired.
-        return base.replace("{tool_schema}", "(no tools registered)")
+            base = base.replace("{tool_schema}", self.tools.schema_for_prompt())
+        else:
+            base = base.replace("{tool_schema}", "(no tools registered)")
+        
+        # Add facts context from memory
+        if self.facts_context:
+            base += "\n\n=== KNOWN FACTS FROM PAST CONVERSATIONS ===\n"
+            base += "Use this information to provide personalized responses:\n"
+            base += self.facts_context
+        
+        return base
 
     # ----------------------- Routing ----------------------- #
     def classify(self, user_text: str, has_image: bool = False) -> str:

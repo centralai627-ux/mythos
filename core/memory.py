@@ -104,7 +104,8 @@ def add_message(conversation_id: str, role: str, content: str):
     db.commit()
 
 
-def get_messages(conversation_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+def get_messages(conversation_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    """Get messages from conversation. Default limit increased to 100."""
     db = get_db()
     rows = db.execute(
         'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?',
@@ -113,7 +114,8 @@ def get_messages(conversation_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     return [dict(r) for r in reversed(rows)]
 
 
-def search_messages(query: str, limit: int = 20) -> List[Dict[str, Any]]:
+def search_messages(query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """Search messages. Default limit increased to 50."""
     db = get_db()
     rows = db.execute(
         '''SELECT m.*, c.title as conversation_title 
@@ -151,7 +153,8 @@ def add_fact(content: str, source: str = 'user'):
     db.commit()
 
 
-def search_facts(query: str, limit: int = 10) -> List[Dict[str, Any]]:
+def search_facts(query: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """Search facts. Default limit increased to 20."""
     db = get_db()
     rows = db.execute(
         'SELECT * FROM facts WHERE content LIKE ? ORDER BY confidence DESC LIMIT ?',
@@ -161,16 +164,28 @@ def search_facts(query: str, limit: int = 10) -> List[Dict[str, Any]]:
 
 
 def get_facts_context(query: str) -> str:
-    facts = search_facts(query, 5)
+    """Get facts context for AI. Returns up to 10 most relevant facts."""
+    facts = search_facts(query, 10)
     if not facts:
         return ''
     return '\n'.join(f'- {f["content"]}' for f in facts)
 
 
+def get_all_facts(limit: int = 50) -> List[Dict[str, Any]]:
+    """Get all facts from memory."""
+    db = get_db()
+    rows = db.execute(
+        'SELECT * FROM facts ORDER BY created_at DESC LIMIT ?',
+        (limit,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # --- Context Building ---
 def build_context(conversation_id: str, user_message: str) -> Dict[str, Any]:
-    messages = get_messages(conversation_id, 20)
-    facts = search_facts(user_message, 3)
+    """Build context for AI with messages, facts, and preferences."""
+    messages = get_messages(conversation_id, 50)  # Increased from 20
+    facts = search_facts(user_message, 10)  # Increased from 3
     model = get_preference('preferred_model', 'mythos-code')
     language = get_preference('preferred_language', 'id')
 
