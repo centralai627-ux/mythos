@@ -25,6 +25,8 @@ let server;
 // Voice mode state
 let voiceMode = false;
 let mimoKeyIdx = 0;
+let lastTTSRequest = 0;  // Track last TTS request time
+const TTS_MIN_INTERVAL = 2000;  // Minimum 2 seconds between TTS requests
 
 // --- Key Manager ---
 let allKeys = EMBEDDED_KEYS.slice();
@@ -177,7 +179,17 @@ function cleanTextForSpeech(text) {
   return text.trim();
 }
 
-async function speakText(text, speed = 1.0, retries = 2) {
+async function speakText(text, speed = 1.0, retries = 3) {
+  // Rate limiting - wait if too soon since last request
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastTTSRequest;
+  if (timeSinceLastRequest < TTS_MIN_INTERVAL) {
+    const waitTime = TTS_MIN_INTERVAL - timeSinceLastRequest;
+    console.log(`TTS rate limiting: waiting ${waitTime}ms`);
+    await new Promise(r => setTimeout(r, waitTime));
+  }
+  lastTTSRequest = Date.now();
+  
   const key = keyManager.getNextMimoKey();
   
   // Clean text for speech
@@ -202,12 +214,14 @@ async function speakText(text, speed = 1.0, retries = 2) {
   for (const model of models) {
     const result = await speakWithModel(text, model, hasIndonesian, speed, retries);
     if (result.success) return result;
-    if (result.error && !result.error.includes('busy') && !result.error.includes('429') && !result.error.includes('503')) {
-      return result; // Non-retryable error
+    
+    // If not a server error, return immediately
+    if (result.statusCode && ![429, 500, 503].includes(result.statusCode)) {
+      return result;
     }
   }
   
-  return { success: false, error: 'All TTS attempts failed - service busy' };
+  return { success: false, error: 'Voice service temporarily unavailable. Please try again in a few moments.' };
 }
 
 async function speakWithModel(text, model, hasIndonesian, speed, retries) {
@@ -236,9 +250,18 @@ async function speakWithModel(text, model, hasIndonesian, speed, retries) {
       const result = await makeTTSRequest(key, body);
       if (result.success) return result;
       
-      if ((result.statusCode === 429 || result.statusCode === 503) && attempt < retries) {
-        const delay = Math.min(5000 * Math.pow(2, attempt) + Math.random() * 2000, 20000);
-        console.log(`TTS retry ${attempt + 1}/${retries} after ${Math.round(delay/1000)}s (model: ${model})`);
+      // Server overloaded - wait longer
+      if (result.statusCode === 503 && attempt < retries) {
+        const delay = Math.min(10000 * Math.pow(2, attempt), 60000); // 10s, 20s, 40s
+        console.log(`TTS server busy, retry ${attempt + 1}/${retries} after ${Math.round(delay/1000)}s (model: ${model})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      
+      // Rate limited - wait and retry
+      if (result.statusCode === 429 && attempt < retries) {
+        const delay = Math.min(5000 * Math.pow(2, attempt), 30000);
+        console.log(`TTS rate limited, retry ${attempt + 1}/${retries} after ${Math.round(delay/1000)}s`);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
@@ -253,7 +276,7 @@ async function speakWithModel(text, model, hasIndonesian, speed, retries) {
     }
   }
   
-  return { success: false, error: 'Max retries exceeded' };
+  return { success: false, error: 'Max retries exceeded', statusCode: 503 };
 }
 
 function makeTTSRequest(key, body) {
