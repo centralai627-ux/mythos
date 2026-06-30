@@ -68,7 +68,9 @@
     "mimo": {
         "base_url": "https://api.xiaomimimo.com/v1",
         "keys": [
-            "sk-smweds6l2ldbox0h0aehzdz8uf9g3010kfx33sl6vrjomv53"
+            "sk-smweds6l2ldbox0h0aehzdz8uf9g3010kfx33sl6vrjomv53",
+            "sk-sd6ux3jfq1hh37rnao9i1jweji8iq4yeyfvkrpbha87j1gq8",
+            "sk-s9ps4zagudflqkzubp6vwlww6ckkxbnk24vyi3d5ab6n7muf"
         ],
         "models": {
             "mimo-v2-pro": "mimo-v2-pro",
