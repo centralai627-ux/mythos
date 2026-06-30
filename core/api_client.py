@@ -123,6 +123,14 @@ class MythosAPI:
                 stream=stream, max_retries=max_retries,
             )
 
+        # Route to MiMo provider if the alias is MiMo-backed.
+        if self._is_mimo(model_alias):
+            return self._chat_mimo(
+                messages, model_alias,
+                temperature=temperature, max_tokens=max_tokens,
+                stream=stream, max_retries=max_retries,
+            )
+
         model = self._resolve_model(model_alias)
         temp = temperature if temperature is not None else self.cfg.temperature
         tokens = max_tokens or self.cfg.max_tokens
@@ -324,6 +332,82 @@ class MythosAPI:
 
         raise APIError(
             f"Shannon request failed after {max_retries} retries. Last: {last_err}"
+        )
+
+    def _chat_mimo(
+        self,
+        messages: List[Dict[str, Any]],
+        model_alias: str,
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        stream: bool = False,
+        max_retries: int = 8,
+    ) -> str:
+        """
+        Chat completion via the MiMo provider (Xiaomi).
+        OpenAI-compatible endpoint with its own key ring.
+        """
+        model = self._resolve_model(model_alias)
+        temp = temperature if temperature is not None else self.cfg.temperature
+        tokens = max_tokens or self.cfg.max_tokens
+
+        payload: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temp,
+            "max_tokens": tokens,
+        }
+        if stream:
+            payload["stream"] = True
+
+        last_err: Optional[str] = None
+        for attempt in range(max_retries):
+            key = self.mimo_keys.get_openrouter_key() if hasattr(self, 'mimo_keys') else None
+            if key is None:
+                # Fallback to config keys
+                import random
+                keys = self.cfg.mimo_keys if hasattr(self.cfg, 'mimo_keys') else []
+                if not keys:
+                    raise APIError("No MiMo API keys configured.")
+                key = random.choice(keys)
+            
+            headers = {"Authorization": f"Bearer {key}"}
+            try:
+                resp = self._session.post(
+                    f"{self.mimo_base_url}/chat/completions",
+                    json=payload, headers=headers, timeout=self.timeout,
+                )
+            except requests.RequestException as e:
+                last_err = f"network: {e}"
+                continue
+
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    msg = data["choices"][0]["message"]
+                    content = msg.get("content") or ""
+                    return content.strip()
+                except (ValueError, KeyError, IndexError) as e:
+                    last_err = f"parse: {e}"
+                    continue
+
+            if resp.status_code == 402:
+                last_err = "Insufficient balance"
+                continue
+            if resp.status_code == 429:
+                time.sleep(min(5.0 * (attempt + 1), 30.0))
+                last_err = "rate limit"
+                continue
+            if 500 <= resp.status_code < 600:
+                time.sleep(min(2.0 * (attempt + 1), 10.0))
+                last_err = f"server error {resp.status_code}"
+                continue
+            last_err = f"http {resp.status_code}"
+            continue
+
+        raise APIError(
+            f"MiMo request failed after {max_retries} retries. Last: {last_err}"
         )
 
     # ----------------------- Streaming ----------------------- #
