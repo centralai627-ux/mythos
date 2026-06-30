@@ -218,49 +218,55 @@ class MythosAgent:
 
     def _detect_image_attachment(self, text: str) -> tuple:
         """
-        Detect image file paths in user input.
-        Returns (image_path, question) or (None, None) if no image found.
+        Detect image/file paths in user input.
+        Returns (file_path, question) or (None, None) if no file found.
         
         Supported patterns:
         - Direct path: "analyze this image.png"
         - Quoted path: "look at 'my screenshot.jpg'"
         - Path with question: "what is in photo.png?"
+        - PDF files: "read this document.pdf"
         """
-        # Pattern 1: Quoted path
-        quoted = re.search(r"['\"]([^'\"]+\.(?:png|jpg|jpeg|gif|webp|bmp))['\"]", text, re.IGNORECASE)
-        if quoted:
-            img_path = quoted.group(1)
-            question = text[:quoted.start()].strip() + " " + text[quoted.end():].strip()
-            return (img_path, question.strip() or "Describe this image in detail.")
+        # All supported extensions
+        all_exts = r"(?:png|jpg|jpeg|gif|webp|bmp|pdf|txt|md|csv|json|html|htm)"
         
-        # Pattern 2: Unquoted path (word ending with image extension)
-        unquoted = re.search(r'(?:^|\s)(\S+\.(?:png|jpg|jpeg|gif|webp|bmp))(?:\s|$|\.|\?)', text, re.IGNORECASE)
+        # Pattern 1: Quoted path
+        quoted = re.search(rf"['\"]([^'\"]+\.{all_exts})['\"]", text, re.IGNORECASE)
+        if quoted:
+            file_path = quoted.group(1)
+            question = text[:quoted.start()].strip() + " " + text[quoted.end():].strip()
+            return (file_path, question.strip() or "Describe this in detail.")
+        
+        # Pattern 2: Unquoted path (word ending with supported extension)
+        unquoted = re.search(rf'(?:^|\s)(\S+\.{all_exts})(?:\s|$|\.|\?)', text, re.IGNORECASE)
         if unquoted:
-            img_path = unquoted.group(1)
+            file_path = unquoted.group(1)
             # Check if file exists
-            full_path = img_path if os.path.isabs(img_path) else os.path.join(self.cwd, img_path)
+            full_path = file_path if os.path.isabs(file_path) else os.path.join(self.cwd, file_path)
             if os.path.isfile(full_path):
                 question = text[:unquoted.start()].strip() + " " + text[unquoted.end():].strip()
-                return (img_path, question.strip() or "Describe this image in detail.")
+                return (file_path, question.strip() or "Describe this in detail.")
         
         return (None, None)
 
     def _analyze_image_with_context(self, image_path: str, question: str) -> None:
-        """Analyze image with vision model and show result with context."""
+        """Analyze image/file with vision model and show result with context."""
         full = image_path if os.path.isabs(image_path) else os.path.join(self.cwd, image_path)
         
         # Verify file exists
         if not os.path.isfile(full):
-            self.ui.error(f"Image not found: {full}")
+            self.ui.error(f"File not found: {full}")
             return
         
         # Check file extension
         ext = os.path.splitext(full)[1].lower()
-        if ext not in IMAGE_EXTS:
-            self.ui.error(f"Not an image file: {ext}")
+        all_exts = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", 
+                    ".pdf", ".txt", ".md", ".csv", ".json", ".html", ".htm"}
+        if ext not in all_exts:
+            self.ui.error(f"Unsupported file type: {ext}")
             return
         
-        self.ui.spinner("analyzing image via Mythos-Vision...", duration=0.1)
+        self.ui.spinner("analyzing file via Mythos-Vision...", duration=0.1)
         
         try:
             result = self.vision.analyze_file(full, question)
