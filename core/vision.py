@@ -18,7 +18,8 @@ IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 
 # Map common doc extensions to a friendly label (we still send as image-like
 # data URL; the vision model handles text-rich images well).
-DOC_EXTS = {".pdf", ".txt", ".md", ".csv", ".json", ".html", ".htm"}
+DOC_EXTS = {".pdf", ".txt", ".md", ".csv", ".json", ".html", ".htm",
+            ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt"}
 
 
 class MythosVision:
@@ -71,8 +72,14 @@ class MythosVision:
 
     def _analyze_text_file(self, path: str, question: str) -> str:
         try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                content = f.read(200_000)  # cap at 200k chars
+            ext = os.path.splitext(path)[1].lower()
+            
+            # Handle .docx files
+            if ext == ".docx":
+                content = self._extract_docx_text(path)
+            else:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read(200_000)  # cap at 200k chars
         except OSError as e:
             return f"⚠ Cannot read file: {e}"
 
@@ -88,3 +95,18 @@ class MythosVision:
             )
         except APIError as e:
             return f"⚠ Vision error: {e}"
+    
+    def _extract_docx_text(self, path: str) -> str:
+        """Extract text from .docx file."""
+        try:
+            from docx import Document
+            doc = Document(path)
+            text_parts = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    text_parts.append(para.text)
+            return "\n".join(text_parts)[:200_000]
+        except ImportError:
+            return "⚠ python-docx not installed. Run: pip install python-docx"
+        except Exception as e:
+            return f"⚠ Cannot read .docx: {e}"

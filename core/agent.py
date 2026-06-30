@@ -225,10 +225,10 @@ class MythosAgent:
         - Direct path: "analyze this image.png"
         - Quoted path: "look at 'my screenshot.jpg'"
         - Path with question: "what is in photo.png?"
-        - PDF files: "read this document.pdf"
+        - PDF/DOCX files: "read this document.pdf"
         """
         # All supported extensions
-        all_exts = r"(?:png|jpg|jpeg|gif|webp|bmp|pdf|txt|md|csv|json|html|htm)"
+        all_exts = r"(?:png|jpg|jpeg|gif|webp|bmp|pdf|docx|doc|xlsx|xls|pptx|ppt|txt|md|csv|json|html|htm)"
         
         # Pattern 1: Quoted path
         quoted = re.search(rf"['\"]([^'\"]+\.{all_exts})['\"]", text, re.IGNORECASE)
@@ -261,7 +261,8 @@ class MythosAgent:
         # Check file extension
         ext = os.path.splitext(full)[1].lower()
         all_exts = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", 
-                    ".pdf", ".txt", ".md", ".csv", ".json", ".html", ".htm"}
+                    ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt",
+                    ".txt", ".md", ".csv", ".json", ".html", ".htm"}
         if ext not in all_exts:
             self.ui.error(f"Unsupported file type: {ext}")
             return
