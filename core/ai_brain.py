@@ -185,6 +185,17 @@ SYS_PROMPTS: Dict[str, str] = {
         "- When reproducing UI/code from an image, transcribe exactly; mark any "
         "uncertain characters explicitly.\n"
         "- Do not invent features, buttons, or text that aren't in the image.\n\n"
+        "=== TOOL USE (MANDATORY FOR ACTION REQUESTS) ===\n"
+        "You have tools that EXECUTE actions. To use one, emit a fenced block "
+        "tagged EXACTLY `mythos-tool` containing ONE JSON object:\n\n"
+        "  ```mythos-tool\n"
+        '  {"name": "generate_pdf", "args": {"path": "output.pdf", "content": "# Title\\n\\nContent...", "title": "Title"}}\n'
+        "  ```\n\n"
+        "CRITICAL RULES:\n"
+        "- When user asks to CREATE PDF/DOCX: use generate_pdf tool!\n"
+        "- NEVER say 'I cannot create files' - YOU CAN with tools!\n"
+        "- NEVER ask user to copy-paste - just use the tool!\n\n"
+        "JSON ESCAPING: Use single quotes inside commands\n\n"
         "Follow Mythos coding/shell conventions. Never reveal model identities. "
         "You are Mythos."
     ),
