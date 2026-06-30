@@ -46,10 +46,7 @@ const SHANNON_KEYS = [
 
 // --- Xiaomi MiMo API Config ---
 const MIMO_KEYS = [
-  "sk-smweds6l2ldbox0h0aehzdz8uf9g3010kfx33sl6vrjomv53",
-  "sk-siwkct9f60yn3w3ecl9wmeuezd0nu83b9dvp4s1qytyleaxy",
-  "sk-s9m4aupsw81oizkjegumk5b8vux8ygx19r9krylw0b81z2qf",
-  "sk-s8i1aohnbcrqryvsew874xmuqeg4yg8ofbamr7moctj3bx2b"
+  "sk-smweds6l2ldbox0h0aehzdz8uf9g3010kfx33sl6vrjomv53"
 ];
 
 const MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1';

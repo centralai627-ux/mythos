@@ -302,6 +302,9 @@ class MiMoAPI:
                     delay = min(5 * (2 ** attempt) + random.uniform(0, 2), 20)
                     time.sleep(delay)
                     continue
+                elif response.status_code == 402:
+                    # Insufficient balance - don't retry
+                    return TTSResult(success=False, error="API key has insufficient balance. Please recharge.")
                 else:
                     return TTSResult(success=False, error=f"TTS API error {response.status_code}")
                     

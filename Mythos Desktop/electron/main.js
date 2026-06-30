@@ -292,6 +292,11 @@ A hint of curiosity and playfulness that feels slightly wrong - like something p
       const result = await makeTTSRequest(key, body);
       if (result.success) return result;
       
+      // Insufficient balance - don't retry, fail immediately
+      if (result.statusCode === 402) {
+        return { success: false, error: 'API key has insufficient balance. Please recharge.' };
+      }
+      
       // Server overloaded - wait longer
       if (result.statusCode === 503 && attempt < retries) {
         const delay = Math.min(10000 * Math.pow(2, attempt), 60000); // 10s, 20s, 40s
