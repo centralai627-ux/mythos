@@ -56,12 +56,60 @@ class MythosAgent:
         self.debug = False
         self.cwd = os.getcwd()
 
-        # Initialize memory system
-        self.conversation_id = memory.create_conversation(
-            title=f"Session {time.strftime('%Y-%m-%d %H:%M')}",
-            model=self.brain.current_model
-        )
+        # Initialize memory system - try to continue last conversation
+        self.conversation_id = self._load_or_create_conversation()
         self.brain.set_conversation(self.conversation_id)
+        
+        # Load relevant facts from past conversations
+        self._load_relevant_context()
+
+    def _load_or_create_conversation(self) -> str:
+        """Load last conversation or create new one."""
+        try:
+            # Try to get recent conversations
+            conversations = memory.get_conversations(limit=5)
+            
+            if conversations:
+                # Load the most recent conversation
+                last_conv = conversations[0]
+                conv_id = last_conv["id"]
+                
+                # Check if it's recent (within last 24 hours)
+                from datetime import datetime, timedelta
+                updated = datetime.fromisoformat(last_conv["updated_at"])
+                if datetime.now() - updated < timedelta(hours=24):
+                    self.ui.info(f"Continuing conversation: {last_conv['title']}")
+                    return conv_id
+            
+            # Create new conversation if no recent one
+            return memory.create_conversation(
+                title=f"Session {time.strftime('%Y-%m-%d %H:%M')}",
+                model=self.brain.current_model
+            )
+        except Exception:
+            # Fallback to new conversation
+            return memory.create_conversation(
+                title=f"Session {time.strftime('%Y-%m-%d %H:%M')}",
+                model=self.brain.current_model
+            )
+
+    def _load_relevant_context(self):
+        """Load relevant facts from past conversations."""
+        try:
+            # Get recent facts
+            facts = memory.search_facts("", limit=10)
+            if facts:
+                # Add facts to brain context
+                context = "Relevant information from past conversations:\n"
+                for fact in facts:
+                    context += f"- {fact['content']}\n"
+                
+                self.brain.history.append({
+                    "role": "system",
+                    "content": context
+                })
+        except Exception:
+            pass  # Silently fail if memory not available
 
     # ----------------------- Tool-loop UI callbacks ----------------------- #
     def _on_tool_call(self, name: str, args: Dict[str, Any], step: int) -> None:
@@ -153,6 +201,9 @@ class MythosAgent:
         # Run the agentic loop with visible tool execution.
         intent, steps = self.brain.run_with_tools(user_text)
 
+        # Save important facts to memory for future reference
+        self._extract_and_save_facts(user_text, intent.text)
+
         # Show completion indicator.
         self.ui.response_complete(
             model=self.brain.current_model,
@@ -171,6 +222,26 @@ class MythosAgent:
             for shell, command in intent.shell_blocks:
                 self._exec_and_show(command, shell=shell)
             self.ui.divider()
+
+    def _extract_and_save_facts(self, user_text: str, response: str):
+        """Extract and save important facts from conversation."""
+        try:
+            # Save user preferences
+            preference_keywords = ["prefer", "like", "want", "need", "always", "never"]
+            for keyword in preference_keywords:
+                if keyword in user_text.lower():
+                    # Extract the preference
+                    memory.add_fact(f"User preference: {user_text[:200]}", "conversation")
+                    break
+            
+            # Save important information
+            important_keywords = ["project", "name", "email", "path", "directory", "password"]
+            for keyword in important_keywords:
+                if keyword in user_text.lower():
+                    memory.add_fact(f"User info: {user_text[:200]}", "conversation")
+                    break
+        except Exception:
+            pass  # Silently fail
 
     # ----------------------- Action execution ----------------------- #
     def _write_file(self, path: str, content: str) -> None:
