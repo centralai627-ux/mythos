@@ -227,13 +227,14 @@ class MiMoAPI:
         # Detect language (simple heuristic)
         has_indonesian = bool(re.search(r'[a-z]+ (adalah|dan|ini|itu|untuk|dengan|tidak|bisa|akan|sudah|yang|dari|ke|di|pada)', text, re.IGNORECASE))
         
-        voice = '冰糖' if has_indonesian else 'Chloe'
+        voice = 'Dean' if not has_indonesian else '冰糖'
         style_instruction = (
             'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia. '
             'Gunakan intonasi yang tepat dan pengucapan yang benar.'
             if has_indonesian else
-            'Speak clearly, naturally, and professionally in English. '
-            'Use proper intonation and pronunciation.'
+            'Speak in a deep, ominous, robotic narrator voice like from Five Nights at Freddy\'s Sister Location. '
+            'Slow, deliberate, slightly menacing tone with perfect clarity. '
+            'Think of a cold AI narrator telling a dark story.'
         )
         
         # MiMo TTS uses Chat Completions API format

@@ -177,7 +177,7 @@ function cleanTextForSpeech(text) {
   return text.trim();
 }
 
-async function speakText(text, speed = 1.0) {
+async function speakText(text, speed = 1.0, retries = 3) {
   const key = keyManager.getNextMimoKey();
   const model = 'mimo-v2.5-tts';
   
@@ -194,10 +194,10 @@ async function speakText(text, speed = 1.0) {
   
   // Detect language (simple heuristic)
   const hasIndonesian = /[a-z]+ (adalah|dan|ini|itu|untuk|dengan|tidak|bisa|akan|sudah|yang|dari|ke|di|pada)/i.test(limitedText);
-  const voice = hasIndonesian ? '冰糖' : 'Chloe';  // Chinese female for Indonesian, English female for English
+  const voice = hasIndonesian ? '冰糖' : 'Dean';  // Chinese female for Indonesian, English male for English (deep narrator voice)
   const styleInstruction = hasIndonesian 
     ? 'Berbicara dengan jelas, natural, dan profesional dalam Bahasa Indonesia. Gunakan intonasi yang tepat dan pengucapan yang benar.'
-    : 'Speak clearly, naturally, and professionally in English. Use proper intonation and pronunciation.';
+    : 'Speak in a deep, ominous, robotic narrator voice like from Five Nights at Freddy\'s Sister Location. Slow, deliberate, slightly menacing tone with perfect clarity. Think of a cold AI narrator telling a dark story.';
   
   return new Promise((resolve) => {
     // MiMo TTS uses Chat Completions API format
@@ -248,6 +248,13 @@ async function speakText(text, speed = 1.0) {
           } catch (e) {
             resolve({ success: false, error: 'Failed to parse response: ' + e.message });
           }
+        } else if ((res.statusCode === 429 || res.statusCode === 503) && retries > 0) {
+          // Rate limited or service busy - retry after delay
+          const delay = Math.min(2000 * (4 - retries), 6000);
+          setTimeout(async () => {
+            const result = await speakText(text, speed, retries - 1);
+            resolve(result);
+          }, delay);
         } else {
           const errorBody = Buffer.concat(chunks).toString();
           resolve({ success: false, error: `TTS API error ${res.statusCode}: ${errorBody.substring(0, 200)}` });
