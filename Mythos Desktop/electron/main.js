@@ -269,6 +269,26 @@ ipcMain.handle('voice:speak', async (_e, text, speed) => {
   return await speakText(text, speed);
 });
 
+// Get audio file as base64 data URL for playback in renderer
+ipcMain.handle('voice:getAudioData', async (_e, audioPath) => {
+  try {
+    if (!fs.existsSync(audioPath)) {
+      return { success: false, error: 'Audio file not found' };
+    }
+    const audioBuffer = fs.readFileSync(audioPath);
+    const base64 = audioBuffer.toString('base64');
+    const ext = path.extname(audioPath).slice(1);
+    const mimeType = ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
+    return { 
+      success: true, 
+      dataUrl: `data:${mimeType};base64,${base64}`,
+      size: audioBuffer.length 
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 // --- Auto-voice hook in chat ---
 const originalChatHandler = ipcMain._events['ai-chat'];
 ipcMain.removeHandler('ai-chat');

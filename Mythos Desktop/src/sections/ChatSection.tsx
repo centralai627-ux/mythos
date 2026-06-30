@@ -122,11 +122,15 @@ export default function ChatSection() {
                 const ttsResult = await window.electronAPI.voice.speak(toolCall.args.text, toolCall.args.speed || 1.0);
                 
                 if (ttsResult.success && ttsResult.audioPath) {
-                  // Play audio
-                  const audio = new Audio(`file://${ttsResult.audioPath}`);
-                  setAudioPlaying(audio);
-                  audio.play();
-                  audio.onended = () => setAudioPlaying(null);
+                  // Play audio using base64 data URL (works in Electron)
+                  const audioData = await window.electronAPI.invoke('voice:getAudioData', ttsResult.audioPath);
+                  
+                  if (audioData.success) {
+                    const audio = new Audio(audioData.dataUrl);
+                    setAudioPlaying(audio);
+                    audio.play().catch(e => console.error('Audio play error:', e));
+                    audio.onended = () => setAudioPlaying(null);
+                  }
                   
                   // Show spoken text as message
                   const reply: Msg = { 
@@ -169,10 +173,15 @@ export default function ChatSection() {
               const ttsResult = await window.electronAPI.voice.speak(content.substring(0, 500), 1.0);
               
               if (ttsResult.success && ttsResult.audioPath) {
-                const audio = new Audio(`file://${ttsResult.audioPath}`);
-                setAudioPlaying(audio);
-                audio.play();
-                audio.onended = () => setAudioPlaying(null);
+                // Play audio using base64 data URL
+                const audioData = await window.electronAPI.invoke('voice:getAudioData', ttsResult.audioPath);
+                
+                if (audioData.success) {
+                  const audio = new Audio(audioData.dataUrl);
+                  setAudioPlaying(audio);
+                  audio.play().catch(e => console.error('Audio play error:', e));
+                  audio.onended = () => setAudioPlaying(null);
+                }
               }
             }
             
