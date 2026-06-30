@@ -104,28 +104,85 @@ export default function ChatSection() {
         
         // Add system instruction for voice mode
         const voiceHistory = isVoiceMode 
-          ? [{ role: 'system' as const, content: 'You are in Voice Mode. Respond ONLY with a mythos-tool block using voice_speak tool to speak your answer. Do NOT write any text. Example: ```mythos-tool\n{"name": "voice_speak", "args": {"text": "your answer here"}}\n```' }, ...history]
+          ? [{ role: 'system' as const, content: 'You are in Voice Mode. You MUST respond by calling the voice_speak tool to speak your answer aloud. Use this exact format:\n\n```mythos-tool\n{"name": "voice_speak", "args": {"text": "your spoken response here"}}\n```\n\nDo NOT write any other text. ONLY output the mythos-tool block.' }, ...history]
           : history;
         
         const r = await window.electronAPI.chat(voiceHistory, actualModel, attachment?.data || null);
         
         if (isVoiceMode && r.success) {
-          // Voice mode: play audio, show minimal text
-          const audioPath = r.audioPath;
-          if (audioPath) {
-            const audio = new Audio(`file://${audioPath}`);
-            setAudioPlaying(audio);
-            audio.play();
-            audio.onended = () => setAudioPlaying(null);
-          }
+          // Parse voice_speak tool call from response
+          const content = r.content || '';
+          const toolMatch = content.match(/```mythos-tool\s*\n([\s\S]*?)\n```/);
           
-          // Show a minimal message
-          const reply: Msg = { 
-            id: Date.now() + 1, 
-            role: "assistant", 
-            content: "🔊 " + (r.content || "Speaking...").substring(0, 100) + "...",
-          };
-          setConvs((p) => p.map((c) => c.id === cid ? { ...c, messages: [...c.messages, reply] } : c));
+          if (toolMatch) {
+            try {
+              const toolCall = JSON.parse(toolMatch[1]);
+              if (toolCall.name === 'voice_speak' && toolCall.args?.text) {
+                // Execute TTS via IPC
+                const ttsResult = await window.electronAPI.voice.speak(toolCall.args.text, toolCall.args.speed || 1.0);
+                
+                if (ttsResult.success && ttsResult.audioPath) {
+                  // Play audio
+                  const audio = new Audio(`file://${ttsResult.audioPath}`);
+                  setAudioPlaying(audio);
+                  audio.play();
+                  audio.onended = () => setAudioPlaying(null);
+                  
+                  // Show spoken text as message
+                  const reply: Msg = { 
+                    id: Date.now() + 1, 
+                    role: "assistant", 
+                    content: "🔊 " + toolCall.args.text,
+                  };
+                  setConvs((p) => p.map((c) => c.id === cid ? { ...c, messages: [...c.messages, reply] } : c));
+                } else {
+                  // TTS failed
+                  const reply: Msg = { 
+                    id: Date.now() + 1, 
+                    role: "assistant", 
+                    content: "❌ Voice failed: " + (ttsResult.error || "Unknown error"),
+                  };
+                  setConvs((p) => p.map((c) => c.id === cid ? { ...c, messages: [...c.messages, reply] } : c));
+                }
+              } else {
+                // Not a voice_speak call
+                const reply: Msg = { 
+                  id: Date.now() + 1, 
+                  role: "assistant", 
+                  content: content,
+                };
+                setConvs((p) => p.map((c) => c.id === cid ? { ...c, messages: [...c.messages, reply] } : c));
+              }
+            } catch (parseError) {
+              // JSON parse error
+              const reply: Msg = { 
+                id: Date.now() + 1, 
+                role: "assistant", 
+                content: content,
+              };
+              setConvs((p) => p.map((c) => c.id === cid ? { ...c, messages: [...c.messages, reply] } : c));
+            }
+          } else {
+            // No tool call found - maybe AI wrote text instead
+            // Try to speak the text directly
+            if (content.length > 10) {
+              const ttsResult = await window.electronAPI.voice.speak(content.substring(0, 500), 1.0);
+              
+              if (ttsResult.success && ttsResult.audioPath) {
+                const audio = new Audio(`file://${ttsResult.audioPath}`);
+                setAudioPlaying(audio);
+                audio.play();
+                audio.onended = () => setAudioPlaying(null);
+              }
+            }
+            
+            const reply: Msg = { 
+              id: Date.now() + 1, 
+              role: "assistant", 
+              content: "🔊 " + content.substring(0, 150) + (content.length > 150 ? "..." : ""),
+            };
+            setConvs((p) => p.map((c) => c.id === cid ? { ...c, messages: [...c.messages, reply] } : c));
+          }
         } else {
           // Normal mode
           const reply: Msg = { 
