@@ -251,6 +251,132 @@ def import_conversations(file_path: str):
     return {'success': True, 'count': count}
 
 
+# --- Obsidian Auto-Sync ---
+def sync_memory_to_obsidian(vault_path: str = None) -> Dict[str, Any]:
+    """Sync memory (conversations, facts, preferences) to Obsidian vault."""
+    import os
+    from datetime import datetime
+    
+    # Detect vault path
+    if not vault_path:
+        home = os.path.expanduser("~")
+        candidates = [
+            os.path.join(home, "Documents", "Obsidian Vault"),
+            os.path.join(home, "Documents", "Obsidian"),
+            os.path.join(home, "Obsidian"),
+        ]
+        for path in candidates:
+            if os.path.isdir(path):
+                obsidian_dir = os.path.join(path, ".obsidian")
+                if os.path.isdir(obsidian_dir):
+                    vault_path = path
+                    break
+        if not vault_path:
+            vault_path = os.path.join(home, "Documents", "Obsidian Vault")
+    
+    # Create Mythos Memory folder
+    memory_folder = os.path.join(vault_path, "Mythos", "Memory")
+    os.makedirs(memory_folder, exist_ok=True)
+    
+    synced = {
+        "conversations": 0,
+        "facts": 0,
+        "preferences": 0,
+    }
+    
+    # Sync conversations
+    conversations = get_conversations(20)
+    conv_folder = os.path.join(memory_folder, "Conversations")
+    os.makedirs(conv_folder, exist_ok=True)
+    
+    for conv in conversations:
+        conv_id = conv["id"]
+        title = conv.get("title", "Untitled").replace("/", "-").replace("\\", "-")
+        date = conv.get("created_at", "")[:10]
+        
+        # Get messages
+        messages = get_messages(conv_id, 50)
+        
+        # Write to Obsidian
+        note_path = os.path.join(conv_folder, f"{date} - {title}.md")
+        with open(note_path, "w", encoding="utf-8") as f:
+            f.write(f"---\n")
+            f.write(f"type: conversation\n")
+            f.write(f"date: {date}\n")
+            f.write(f"model: {conv.get('model', 'unknown')}\n")
+            f.write(f"tags: [mythos, conversation]\n")
+            f.write(f"---\n\n")
+            f.write(f"# {title}\n\n")
+            f.write(f"**Date**: {date}\n")
+            f.write(f"**Model**: {conv.get('model', 'unknown')}\n\n")
+            f.write(f"## Messages\n\n")
+            
+            for msg in messages:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                emoji = "👤" if role == "user" else "🤖" if role == "assistant" else "⚙️"
+                f.write(f"### {emoji} {role.capitalize()}\n\n")
+                f.write(f"{content[:500]}{'...' if len(content) > 500 else ''}\n\n")
+        
+        synced["conversations"] += 1
+    
+    # Sync facts
+    facts = get_all_facts(50)
+    if facts:
+        facts_path = os.path.join(memory_folder, "Facts.md")
+        with open(facts_path, "w", encoding="utf-8") as f:
+            f.write(f"---\n")
+            f.write(f"type: facts\n")
+            f.write(f"tags: [mythos, facts, memory]\n")
+            f.write(f"---\n\n")
+            f.write(f"# Mythos Memory - Facts\n\n")
+            f.write(f"Last synced: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
+            
+            for fact in facts:
+                f.write(f"- {fact.get('content', '')}\n")
+                synced["facts"] += 1
+    
+    # Sync preferences
+    preferences = get_all_preferences()
+    if preferences:
+        prefs_path = os.path.join(memory_folder, "Preferences.md")
+        with open(prefs_path, "w", encoding="utf-8") as f:
+            f.write(f"---\n")
+            f.write(f"type: preferences\n")
+            f.write(f"tags: [mythos, preferences, settings]\n")
+            f.write(f"---\n\n")
+            f.write(f"# Mythos Preferences\n\n")
+            f.write(f"Last synced: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
+            
+            for key, value in preferences.items():
+                f.write(f"- **{key}**: {value}\n")
+                synced["preferences"] += 1
+    
+    # Create index
+    index_path = os.path.join(memory_folder, "Memory Index.md")
+    with open(index_path, "w", encoding="utf-8") as f:
+        f.write(f"---\n")
+        f.write(f"type: index\n")
+        f.write(f"tags: [mythos, memory, index]\n")
+        f.write(f"---\n\n")
+        f.write(f"# Mythos Memory Index\n\n")
+        f.write(f"Last synced: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
+        f.write(f"## Statistics\n\n")
+        f.write(f"- Conversations: {synced['conversations']}\n")
+        f.write(f"- Facts: {synced['facts']}\n")
+        f.write(f"- Preferences: {synced['preferences']}\n\n")
+        f.write(f"## Folders\n\n")
+        f.write(f"- [[Conversations]] - Chat history\n")
+        f.write(f"- [[Facts]] - Learned facts\n")
+        f.write(f"- [[Preferences]] - User preferences\n")
+    
+    return {
+        "success": True,
+        "vault": vault_path,
+        "synced": synced,
+    }
+
+
 def close():
     global _connection
     if _connection:

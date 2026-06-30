@@ -340,6 +340,11 @@ class ToolRegistry:
                 "params": {"vault_path": "string (optional)"},
                 "run": self._obsidian_sync_feed,
             },
+            "obsidian_sync_memory": {
+                "desc": "Sync Mythos memory (conversations, facts, preferences) to Obsidian vault automatically.",
+                "params": {"vault_path": "string (optional)"},
+                "run": self._obsidian_sync_memory,
+            },
             # Smart AI
             "smart_reflect": {
                 "desc": "AI self-reflection - critique own response and suggest improvements.",
@@ -1499,6 +1504,26 @@ class ToolRegistry:
             return ToolResult(False, "", "Sync failed")
         except Exception as e:
             return ToolResult(False, "", f"Sync error: {e}")
+
+    def _obsidian_sync_memory(self, vault_path: str = "", **_) -> ToolResult:
+        """Sync Mythos memory to Obsidian."""
+        try:
+            from .memory import sync_memory_to_obsidian
+            
+            result = sync_memory_to_obsidian(vault_path if vault_path else None)
+            
+            if result.get("success"):
+                synced = result["synced"]
+                output = f"Memory synced to Obsidian!\n\n"
+                output += f"Vault: {result['vault']}\n\n"
+                output += f"Synced:\n"
+                output += f"  - Conversations: {synced['conversations']}\n"
+                output += f"  - Facts: {synced['facts']}\n"
+                output += f"  - Preferences: {synced['preferences']}\n"
+                return ToolResult(True, output)
+            return ToolResult(False, "", "Memory sync failed")
+        except Exception as e:
+            return ToolResult(False, "", f"Memory sync error: {e}")
 
     # ----------------------- Smart AI Tools ----------------------- #
     def _smart_reflect(self, question: str = "", response: str = "", **_) -> ToolResult:

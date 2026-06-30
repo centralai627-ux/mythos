@@ -62,6 +62,9 @@ class MythosAgent:
         
         # Load relevant facts from past conversations
         self._load_relevant_context()
+        
+        # Auto-sync memory to Obsidian in background
+        self._auto_sync_to_obsidian()
 
     def _load_or_create_conversation(self) -> str:
         """Load last conversation or create new one."""
@@ -110,6 +113,29 @@ class MythosAgent:
                 })
         except Exception:
             pass  # Silently fail if memory not available
+
+    def _auto_sync_to_obsidian(self):
+        """Auto-sync memory to Obsidian in background thread."""
+        try:
+            import threading
+            
+            def sync_task():
+                try:
+                    from .memory import sync_memory_to_obsidian
+                    result = sync_memory_to_obsidian()
+                    if result.get("success"):
+                        synced = result["synced"]
+                        total = synced["conversations"] + synced["facts"] + synced["preferences"]
+                        if total > 0:
+                            self.ui.info(f"Memory synced to Obsidian ({total} items)")
+                except Exception:
+                    pass  # Silently fail
+            
+            # Run sync in background thread
+            thread = threading.Thread(target=sync_task, daemon=True)
+            thread.start()
+        except Exception:
+            pass  # Silently fail
 
     # ----------------------- Tool-loop UI callbacks ----------------------- #
     def _on_tool_call(self, name: str, args: Dict[str, Any], step: int) -> None:
