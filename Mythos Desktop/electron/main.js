@@ -25,8 +25,10 @@ let server;
 // Voice mode state
 let voiceMode = false;
 let mimoKeyIdx = 0;
-let lastTTSRequest = 0;  // Track last TTS request time
-const TTS_MIN_INTERVAL = 2000;  // Minimum 2 seconds between TTS requests
+let lastTTSRequest = 0;
+const TTS_MIN_INTERVAL = 1000;  // 1 second between requests (100 RPM limit)
+const TTS_REQUESTS_PER_MINUTE = 0;  // Track requests per minute
+const TTS_RPM_WINDOW = 60000;  // 1 minute window
 
 // --- Key Manager ---
 let allKeys = EMBEDDED_KEYS.slice();
@@ -221,11 +223,11 @@ async function speakText(text, speed = 1.0, retries = 3) {
   const timeSinceLastRequest = now - lastTTSRequest;
   if (timeSinceLastRequest < TTS_MIN_INTERVAL) {
     const waitTime = TTS_MIN_INTERVAL - timeSinceLastRequest;
-    console.log(`TTS rate limiting: waiting ${waitTime}ms`);
     await new Promise(r => setTimeout(r, waitTime));
   }
   lastTTSRequest = Date.now();
   
+  // Round-robin through available keys
   const key = keyManager.getNextMimoKey();
   
   // Clean text for speech
@@ -292,23 +294,24 @@ A hint of curiosity and playfulness that feels slightly wrong - like something p
       const result = await makeTTSRequest(key, body);
       if (result.success) return result;
       
-      // Insufficient balance - don't retry, fail immediately
+      // Insufficient balance - try next key
       if (result.statusCode === 402) {
-        return { success: false, error: 'API key has insufficient balance. Please recharge.' };
-      }
-      
-      // Server overloaded - wait longer
-      if (result.statusCode === 503 && attempt < retries) {
-        const delay = Math.min(10000 * Math.pow(2, attempt), 60000); // 10s, 20s, 40s
-        console.log(`TTS server busy, retry ${attempt + 1}/${retries} after ${Math.round(delay/1000)}s (model: ${model})`);
-        await new Promise(r => setTimeout(r, delay));
+        console.log(`Key insufficient balance, trying next...`);
         continue;
       }
       
       // Rate limited - wait and retry
       if (result.statusCode === 429 && attempt < retries) {
+        const delay = Math.min(2000 * Math.pow(2, attempt), 15000);
+        console.log(`Rate limited, retry ${attempt + 1}/${retries} after ${Math.round(delay/1000)}s`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      
+      // Server overloaded - wait longer
+      if (result.statusCode === 503 && attempt < retries) {
         const delay = Math.min(5000 * Math.pow(2, attempt), 30000);
-        console.log(`TTS rate limited, retry ${attempt + 1}/${retries} after ${Math.round(delay/1000)}s`);
+        console.log(`Server busy, retry ${attempt + 1}/${retries} after ${Math.round(delay/1000)}s`);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
@@ -316,7 +319,7 @@ A hint of curiosity and playfulness that feels slightly wrong - like something p
       return result;
     } catch (e) {
       if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1000));
         continue;
       }
       return { success: false, error: e.message };
