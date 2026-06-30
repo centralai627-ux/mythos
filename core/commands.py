@@ -203,6 +203,12 @@ class CommandRegistry:
             category="system"
         ))
         self._register(Command(
+            name="/voice",
+            description="Toggle auto-voice mode (speak responses)",
+            handler=self._cmd_voice,
+            category="system"
+        ))
+        self._register(Command(
             name="/verbose", aliases=["/v"],
             description="Toggle verbose output",
             usage="/verbose [on|off]",
@@ -506,6 +512,24 @@ class CommandRegistry:
     def _cmd_version(self, arg: str) -> None:
         if self.agent:
             self.agent.ui.info("Mythos v1.0.0 Glasswing")
+
+    def _cmd_voice(self, arg: str) -> None:
+        """Toggle auto-voice mode."""
+        if not self.agent:
+            return
+        state = arg.strip().lower()
+        if state == "on":
+            self.agent.voice_mode = True
+            self.agent.ui.success("Voice mode ON - responses will be spoken automatically")
+        elif state == "off":
+            self.agent.voice_mode = False
+            self.agent.ui.success("Voice mode OFF")
+        else:
+            self.agent.voice_mode = not getattr(self.agent, "voice_mode", False)
+            status = "ON" if self.agent.voice_mode else "OFF"
+            self.agent.ui.info(f"Voice mode: {status}")
+            if self.agent.voice_mode:
+                self.agent.ui.info("Responses will be spoken automatically using MiMo TTS")
 
     def _cmd_memory(self, arg: str) -> None:
         if not self.agent:

@@ -55,6 +55,7 @@ class MythosAgent:
         self.verbose = False
         self.debug = False
         self.cwd = os.getcwd()
+        self.voice_mode = False  # Auto-voice mode (speak responses automatically)
 
         # Initialize memory system - try to continue last conversation
         self.conversation_id = self._load_or_create_conversation()
@@ -240,6 +241,10 @@ class MythosAgent:
         self.ui.assistant(intent.text, model=self.brain.current_model,
                           tools_used=steps)
 
+        # Auto-voice mode: speak the response automatically
+        if self.voice_mode:
+            self._speak_response(intent.text)
+
         # Execute any remaining direct shell/file actions emitted by the AI.
         if intent.has_actions:
             self.ui.divider("EXECUTING ACTIONS")
@@ -248,6 +253,73 @@ class MythosAgent:
             for shell, command in intent.shell_blocks:
                 self._exec_and_show(command, shell=shell)
             self.ui.divider()
+
+    def _speak_response(self, text: str):
+        """Speak the response using TTS."""
+        try:
+            # Clean text for speech (remove markdown, code blocks, etc.)
+            clean_text = self._clean_text_for_speech(text)
+            
+            if not clean_text or len(clean_text) < 10:
+                return  # Too short to speak
+            
+            # Limit speech length
+            if len(clean_text) > 500:
+                clean_text = clean_text[:500] + "... I've truncated the rest."
+            
+            from .mimo_api import mimo_api
+            result = mimo_api.tts(text=clean_text)
+            
+            if result.success:
+                # Play audio
+                self._play_audio(result.audio_data)
+            else:
+                self.ui.info(f"[Voice] TTS failed: {result.error}")
+        except Exception as e:
+            self.ui.info(f"[Voice] Error: {e}")
+
+    def _clean_text_for_speech(self, text: str) -> str:
+        """Clean text for speech synthesis."""
+        import re
+        
+        # Remove code blocks
+        text = re.sub(r'```[\s\S]*?```', '', text)
+        # Remove inline code
+        text = re.sub(r'`[^`]*`', '', text)
+        # Remove markdown links
+        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+        # Remove markdown headers
+        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+        # Remove bold/italic markers
+        text = re.sub(r'\*{1,2}([^\*]*)\*{1,2}', r'\1', text)
+        # Remove bullet points
+        text = re.sub(r'^[\-\*]\s+', '', text, flags=re.MULTILINE)
+        # Remove numbered lists
+        text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)
+        # Remove extra whitespace
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = text.strip()
+        
+        return text
+
+    def _play_audio(self, audio_data: bytes):
+        """Play audio data."""
+        try:
+            import tempfile
+            import subprocess
+            
+            # Save audio to temp file
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                f.write(audio_data)
+                audio_path = f.name
+            
+            # Play based on OS
+            if os.name == 'nt':  # Windows
+                os.startfile(audio_path)
+            else:  # macOS/Linux
+                subprocess.run(['xdg-open', audio_path], check=False)
+        except Exception as e:
+            self.ui.info(f"[Voice] Cannot play audio: {e}")
 
     def _extract_and_save_facts(self, user_text: str, response: str):
         """Extract and save important facts from conversation."""
