@@ -211,17 +211,34 @@ class MiMoAPI:
         self,
         text: str,
         model: str = "mimo-v2.5-tts",
-        voice: str = "default",
+        voice: str = "mimo_default",
         speed: float = 1.0,
-        output_format: str = "mp3",
+        output_format: str = "wav",
     ) -> TTSResult:
-        """Convert text to speech using MiMo TTS."""
+        """Convert text to speech using MiMo TTS.
+        
+        MiMo TTS uses Chat Completions API format:
+        - user message: style/tone instructions
+        - assistant message: text to speak
+        - audio field: format and voice settings
+        """
+        # MiMo TTS uses Chat Completions API format
         data = {
             "model": model,
-            "input": text,
-            "voice": voice,
-            "speed": speed,
-            "response_format": output_format,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Speak naturally and clearly"
+                },
+                {
+                    "role": "assistant",
+                    "content": text
+                }
+            ],
+            "audio": {
+                "format": output_format,
+                "voice": voice
+            }
         }
         
         key = self._get_key()
@@ -229,7 +246,8 @@ class MiMoAPI:
             "Authorization": f"Bearer {key}",
         }
         
-        url = f"{self.base_url}/audio/speech"
+        # TTS uses Chat Completions endpoint, not /audio/speech
+        url = f"{self.base_url}/chat/completions"
         
         try:
             response = self._session.post(
@@ -240,11 +258,24 @@ class MiMoAPI:
             )
             response.raise_for_status()
             
-            return TTSResult(
-                success=True,
-                audio_data=response.content,
-                duration=len(response.content) / 16000,  # Rough estimate
-            )
+            result = response.json()
+            
+            # Audio is in result['choices'][0]['message']['audio']['data'] as base64
+            if (result.get('choices') and 
+                result['choices'][0].get('message') and 
+                result['choices'][0]['message'].get('audio')):
+                
+                audio_base64 = result['choices'][0]['message']['audio']['data']
+                import base64
+                audio_data = base64.b64decode(audio_base64)
+                
+                return TTSResult(
+                    success=True,
+                    audio_data=audio_data,
+                    duration=len(audio_data) / 32000,  # 24kHz sample rate
+                )
+            else:
+                return TTSResult(success=False, error="No audio in response")
         except Exception as e:
             return TTSResult(success=False, error=str(e))
     

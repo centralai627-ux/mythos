@@ -193,18 +193,29 @@ async function speakText(text, speed = 1.0) {
     : cleanText;
   
   return new Promise((resolve) => {
+    // MiMo TTS uses Chat Completions API format
     const body = JSON.stringify({
-      model,
-      input: limitedText,
-      voice: 'default',
-      speed: speed,
-      response_format: 'mp3'
+      model: model,
+      messages: [
+        {
+          role: "user",
+          content: "Speak naturally and clearly"
+        },
+        {
+          role: "assistant",
+          content: limitedText
+        }
+      ],
+      audio: {
+        format: "wav",
+        voice: "mimo_default"
+      }
     });
     
     const req = https.request({
       hostname: 'api.xiaomimimo.com',
       port: 443,
-      path: '/v1/audio/speech',
+      path: '/v1/chat/completions',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -215,18 +226,30 @@ async function speakText(text, speed = 1.0) {
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
         if (res.statusCode === 200) {
-          const audioData = Buffer.concat(chunks);
-          const tempPath = path.join(os.tmpdir(), `mythos_tts_${Date.now()}.mp3`);
-          fs.writeFileSync(tempPath, audioData);
-          resolve({ success: true, audioPath: tempPath, duration: audioData.length / 16000 });
+          try {
+            const response = JSON.parse(Buffer.concat(chunks).toString());
+            // Audio is in response.choices[0].message.audio.data as base64
+            if (response.choices && response.choices[0] && response.choices[0].message && response.choices[0].message.audio) {
+              const audioBase64 = response.choices[0].message.audio.data;
+              const audioBuffer = Buffer.from(audioBase64, 'base64');
+              const tempPath = path.join(os.tmpdir(), `mythos_tts_${Date.now()}.wav`);
+              fs.writeFileSync(tempPath, audioBuffer);
+              resolve({ success: true, audioPath: tempPath, duration: audioBuffer.length / 32000 });
+            } else {
+              resolve({ success: false, error: 'No audio in response' });
+            }
+          } catch (e) {
+            resolve({ success: false, error: 'Failed to parse response: ' + e.message });
+          }
         } else {
-          resolve({ success: false, error: `TTS API error: ${res.statusCode}` });
+          const errorBody = Buffer.concat(chunks).toString();
+          resolve({ success: false, error: `TTS API error ${res.statusCode}: ${errorBody.substring(0, 200)}` });
         }
       });
     });
     
     req.on('error', (e) => resolve({ success: false, error: e.message }));
-    req.setTimeout(30000, () => { req.destroy(); resolve({ success: false, error: 'timeout' }); });
+    req.setTimeout(60000, () => { req.destroy(); resolve({ success: false, error: 'timeout' }); });
     req.write(body);
     req.end();
   });
